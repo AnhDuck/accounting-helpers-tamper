@@ -1,0 +1,54 @@
+// ==UserScript==
+// @name         Accounting Helpers Dev
+// @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
+// @version      0.1.0-dev
+// @description  Localhost loader for Accounting Helpers modules.
+// @match        https://next.waveapps.com/*
+// @match        https://www.aliexpress.com/p/order/index.html*
+// @match        https://www.aliexpress.com/p/shoppingcart/index.html*
+// @run-at       document-idle
+// @grant        GM_addStyle
+// @grant        GM_setClipboard
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_deleteValue
+// @grant        GM_listValues
+// @grant        GM_addValueChangeListener
+// @grant        GM_openInTab
+// @grant        GM_registerMenuCommand
+// @grant        GM_xmlhttpRequest
+// @connect      open.er-api.com
+// @require      http://127.0.0.1:5173/src/core/constants.js
+// @require      http://127.0.0.1:5173/src/core/logger.js
+// @require      http://127.0.0.1:5173/src/core/storage.js
+// @require      http://127.0.0.1:5173/src/core/settings.js
+// @require      http://127.0.0.1:5173/src/core/dom.js
+// @require      http://127.0.0.1:5173/src/core/react.js
+// @require      http://127.0.0.1:5173/src/core/money.js
+// @require      http://127.0.0.1:5173/src/core/dates.js
+// @require      http://127.0.0.1:5173/src/core/events.js
+// @require      http://127.0.0.1:5173/src/ui/styles.js
+// @require      http://127.0.0.1:5173/src/ui/toast.js
+// @require      http://127.0.0.1:5173/src/ui/floatingPanel.js
+// @require      http://127.0.0.1:5173/src/ui/settingsModal.js
+// @require      http://127.0.0.1:5173/src/sites/wave/detect.js
+// @require      http://127.0.0.1:5173/src/sites/wave/selectors.js
+// @require      http://127.0.0.1:5173/src/sites/wave/dropdowns.js
+// @require      http://127.0.0.1:5173/src/sites/wave/transactionModal.js
+// @require      http://127.0.0.1:5173/src/sites/wave/transactionList.js
+// @require      http://127.0.0.1:5173/src/sites/wave/fillTransaction.js
+// @require      http://127.0.0.1:5173/src/sites/aliexpress/detect.js
+// @require      http://127.0.0.1:5173/src/sites/aliexpress/selectors.js
+// @require      http://127.0.0.1:5173/src/sites/aliexpress/extractOrder.js
+// @require      http://127.0.0.1:5173/src/features/waveSavingsDashboard/index.js
+// @require      http://127.0.0.1:5173/src/features/waveTaxButtons/index.js
+// @require      http://127.0.0.1:5173/src/features/waveAccountSwitcher/index.js
+// @require      http://127.0.0.1:5173/src/features/waveReviewedSave/index.js
+// @require      http://127.0.0.1:5173/src/features/aliexpressCadCopy/index.js
+// @require      http://127.0.0.1:5173/src/features/aliexpressCartPerUnit/index.js
+// @require      http://127.0.0.1:5173/src/features/aliToWave/payload.js
+// @require      http://127.0.0.1:5173/src/features/aliToWave/duplicateGuard.js
+// @require      http://127.0.0.1:5173/src/features/aliToWave/stageFromAliExpress.js
+// @require      http://127.0.0.1:5173/src/features/aliToWave/importIntoWave.js
+// @require      http://127.0.0.1:5173/src/init.js
+// ==/UserScript==
