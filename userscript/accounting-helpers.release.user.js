@@ -542,11 +542,11 @@
       .ah-button:hover { background: #216a7e; }
       .ah-button:disabled { cursor: default; opacity: .55; }
       .ah-button-secondary {
-        background: #fff;
+        background: #f1f4f5;
         border-color: #a8b7bd;
         color: #16343d;
       }
-      .ah-button-secondary:hover { background: #eef5f7; }
+      .ah-button-secondary:hover { background: #e3eaed; }
       .ah-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
       .ah-toast-layer {
         bottom: 18px;
@@ -706,8 +706,8 @@
     ["wave.defaultAliExpressAccount", "Default Wave account", "text"],
     ["wave.defaultAliExpressCategory", "Default Wave category", "text"],
     ["wave.descriptionPrefix", "AliExpress description prefix", "text"],
-    ["wave.accounts.amex", "Account switcher option A", "text"],
-    ["wave.accounts.creditCard", "Account switcher option B", "text"],
+    ["wave.accounts.amex", "Account 1", "text"],
+    ["wave.accounts.creditCard", "Account 2", "text"],
     ["aliExpress.defaultCurrency", "AliExpress source currency", "text"],
     ["aliExpress.targetCurrency", "Accounting target currency", "text"]
   ];
@@ -747,10 +747,11 @@
     return wrapper;
   }
 
-  function captureButton(label, path, read) {
+  function captureButton(label, path, read, title) {
     return ah.core.dom.el("button", {
       type: "button",
       class: "ah-button ah-button-secondary",
+      title,
       onclick: () => {
         const value = read();
         if (!value) {
@@ -760,7 +761,7 @@
         const input = document.querySelector(`[data-setting-path="${CSS.escape(path)}"]`);
         if (input) input.value = value;
         ah.core.settings.set(path, value);
-        ah.ui.toast.show("Saved current Wave value.");
+        ah.ui.toast.show(`${label} saved.`);
       }
     }, label);
   }
@@ -786,6 +787,14 @@
       captureRow.append(
         captureButton("Use current account", "wave.defaultAliExpressAccount", () =>
           ah.sites.wave.transactionModal.readField(["account", "payment account"])
+        ),
+        captureButton("Save current account as Account 1", "wave.accounts.amex", () =>
+          ah.sites.wave.transactionModal.readField(["account", "payment account"]),
+          "Save the current Wave Account field as Account 1 in local Tampermonkey settings. Switch account uses Account 1 and Account 2."
+        ),
+        captureButton("Save current account as Account 2", "wave.accounts.creditCard", () =>
+          ah.sites.wave.transactionModal.readField(["account", "payment account"]),
+          "Save the current Wave Account field as Account 2 in local Tampermonkey settings. Switch account uses Account 1 and Account 2."
         ),
         captureButton("Use current category", "wave.defaultAliExpressCategory", () =>
           ah.sites.wave.transactionModal.readField(["category"])
@@ -1109,15 +1118,10 @@
   ah.sites = ah.sites || {};
   ah.sites.aliexpress = ah.sites.aliexpress || {};
 
-  function findOrderRoot() {
-    const sendButton = document.getElementById("ah-send-to-wave");
-    return sendButton?.closest(ah.sites.aliexpress.selectors.orderContainers) ||
-      ah.core.dom.visible(ah.core.dom.qsa(ah.sites.aliexpress.selectors.orderContainers))[0] ||
-      document.body;
-  }
-
-  function extractOrderId(root) {
-    const source = root || findOrderRoot();
+  function directOrderId(source) {
+    if (!source) return "";
+    const ownAttr = source.getAttribute?.("data-order-id");
+    if (ownAttr) return ownAttr;
     const fromAttr = ah.core.dom.qsa("[data-order-id]", source).map((node) => node.getAttribute("data-order-id")).find(Boolean);
     if (fromAttr) return fromAttr;
 
@@ -1126,6 +1130,30 @@
     if (labelMatch) return labelMatch[1];
     const longNumber = bodyText.match(/\b\d{12,20}\b/);
     return longNumber ? longNumber[0] : "";
+  }
+
+  function hasOrderPayloadContext(source) {
+    return !!source?.querySelector?.(".ah-send-to-wave, .ah-ae-cad-row, .ae-helper-cad-row, [data-ah-cad-total]");
+  }
+
+  function findOrderRoot(startNode) {
+    const start = startNode?.nodeType === Node.ELEMENT_NODE ? startNode : startNode?.parentElement;
+    const fallbackStart = start || document.querySelector(".ah-send-to-wave") || document.getElementById("ah-send-to-wave");
+    for (let node = fallbackStart; node && node !== document.documentElement; node = node.parentElement) {
+      if (directOrderId(node) && hasOrderPayloadContext(node)) return node;
+    }
+
+    const closestOrder = fallbackStart?.closest?.(ah.sites.aliexpress.selectors.orderContainers);
+    if (directOrderId(closestOrder)) return closestOrder;
+
+    return ah.core.dom.visible(ah.core.dom.qsa(ah.sites.aliexpress.selectors.orderContainers))
+      .find((node) => directOrderId(node)) ||
+      document.body;
+  }
+
+  function extractOrderId(root) {
+    const source = root || findOrderRoot();
+    return directOrderId(source);
   }
 
   function extractOrderDate(root) {
@@ -1146,8 +1174,11 @@
 
   function extractCadTotal(root) {
     const source = root || findOrderRoot();
-    const existing = source.querySelector("[data-ah-cad-total]");
-    if (existing) return ah.core.money.parseMoney(existing.getAttribute("data-ah-cad-total"));
+    const existing = [source, ...ah.core.dom.qsa("[data-ah-cad-total]", source)]
+      .map((node) => node.getAttribute?.("data-ah-cad-total") || node.dataset?.value || ah.core.dom.text(node))
+      .map((value) => ah.core.money.parseMoney(value))
+      .find((value) => value !== null);
+    if (existing !== undefined) return existing;
     const text = ah.core.dom.text(source);
     const cad = text.match(/(?:CA\s*\$|CAD\s*)\s*([0-9][\d,]*(?:\.\d{2})?)/i);
     return cad ? ah.core.money.parseMoney(cad[1]) : null;
@@ -1326,6 +1357,16 @@
         onclick: openDashboard
       });
       panel.append(panelClicksEl);
+    }
+    if (!panel.querySelector("[data-ah-open-settings]")) {
+      panel.append(ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button ah-button-secondary",
+        "data-ah-open-settings": "1",
+        style: "min-height:28px;padding:5px 8px;",
+        title: "Open Accounting Helpers settings, including local Account 1 and Account 2 setup.",
+        onclick: () => ah.ui.settingsModal.open()
+      }, "Settings"));
     }
     updateSavingsUI();
   }
@@ -1597,6 +1638,7 @@
   ah.features.waveAccountSwitcher = ah.features.waveAccountSwitcher || {};
 
   const injectedAttr = "data-ah-wave-account-switcher";
+  const accountDropdownSelector = ".transactions-list-v2__anchor-transaction__edit__field--account__select";
   let busy = false;
 
   function sleep(ms) {
@@ -1605,12 +1647,37 @@
 
   function findAccountDropdown(root) {
     const scope = root || document;
-    return scope.querySelector(".transactions-list-v2__anchor-transaction__edit__field--account__select") ||
-      ah.core.dom.qsa(".wv-select.wv-select--fluid", scope).find((dropdown) => {
-        const label = ah.core.dom.text(dropdown.querySelector(".wv-select__label"));
-        return /card|account|cash|bank|credit/i.test(label);
-      }) ||
+    return ah.core.dom.visible(ah.core.dom.qsa(`${accountDropdownSelector}, .wv-select.wv-select--fluid, [role='combobox']`, scope))
+      .find(isAccountDropdown) ||
       ah.core.dom.findFieldByLabel(scope, ["account", "payment account"]);
+  }
+
+  function hasAccountLabel(text) {
+    return /^(account|payment account)\b/i.test(String(text || "").trim());
+  }
+
+  function isAccountDropdown(dropdown) {
+    if (!dropdown) return false;
+    if (dropdown.matches(accountDropdownSelector)) return true;
+    const aria = dropdown.getAttribute("aria-label") || dropdown.getAttribute("name") || dropdown.getAttribute("data-testid");
+    if (hasAccountLabel(aria)) return true;
+
+    let node = dropdown;
+    for (let depth = 0; node && depth < 5; depth += 1, node = node.parentElement) {
+      const label = node.querySelector?.("label");
+      if (label && !dropdown.contains(label) && hasAccountLabel(ah.core.dom.text(label))) return true;
+
+      const siblings = Array.from(node.parentElement?.children || []);
+      const index = siblings.indexOf(node);
+      const previousText = siblings.slice(0, Math.max(0, index)).reverse()
+        .map((item) => ah.core.dom.text(item))
+        .find(Boolean);
+      if (hasAccountLabel(previousText)) return true;
+
+      const fieldText = ah.core.dom.text(node);
+      if (hasAccountLabel(fieldText) && fieldText.length < 120) return true;
+    }
+    return false;
   }
 
   function getCurrentAccount(dropdown) {
@@ -1690,7 +1757,7 @@
       const current = getCurrentAccount(dropdown);
       const target = chooseTarget(current);
       if (!dropdown || !target) {
-        ah.ui.toast.show("Configure two account switcher options in settings.", { tone: "warn" });
+        ah.ui.toast.show("Configure Account 1 and Account 2 in settings.", { tone: "warn" });
         return;
       }
       const ok = await switchDirect(dropdown, target);
@@ -1706,36 +1773,27 @@
     }
   }
 
-  function onCapture(event, path) {
-    const dropdown = findAccountDropdown(event.currentTarget.closest(".anchor-transaction__line-item--singleline, [role='dialog']") || document);
-    const current = getCurrentAccount(dropdown);
-    if (!current) {
-      ah.ui.toast.show("No current account detected.", { tone: "warn" });
-      return;
-    }
-    ah.core.settings.set(path, current);
-    ah.ui.toast.show("Account switcher option saved.");
-  }
-
   function injectNear(dropdown) {
     const target = dropdown.closest(".anchor-transaction__line-item--singleline") || dropdown.parentElement;
     if (!target || target.hasAttribute(injectedAttr)) return;
-    target.setAttribute(injectedAttr, "1");
     const row = ah.core.dom.el("div", { class: "ah-pill-row", style: "margin:8px 0 12px;" });
     if (configuredAccounts().length >= 2) {
-      row.append(ah.core.dom.el("button", { type: "button", class: "ah-button ah-button-secondary", onclick: onSwitch }, "Switch account"));
+      row.append(ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button ah-button-secondary",
+        title: "Switch between Account 1 and Account 2 saved in local Tampermonkey settings.",
+        onclick: onSwitch
+      }, "Switch account"));
     }
-    row.append(
-      ah.core.dom.el("button", { type: "button", class: "ah-button ah-button-secondary", onclick: (event) => onCapture(event, "wave.accounts.amex") }, "Capture as option A"),
-      ah.core.dom.el("button", { type: "button", class: "ah-button ah-button-secondary", onclick: (event) => onCapture(event, "wave.accounts.creditCard") }, "Capture as option B")
-    );
+    if (!row.childElementCount) return;
+    target.setAttribute(injectedAttr, "1");
     target.insertAdjacentElement("afterend", row);
   }
 
   function ensure() {
     if (!ah.sites.wave.detect.isWave()) return;
-    const dropdowns = ah.core.dom.visible(ah.core.dom.qsa(".transactions-list-v2__anchor-transaction__edit__field--account__select, .wv-select.wv-select--fluid"));
-    dropdowns.filter((dropdown) => getCurrentAccount(dropdown)).forEach(injectNear);
+    const dropdowns = ah.core.dom.visible(ah.core.dom.qsa(`${accountDropdownSelector}, .wv-select.wv-select--fluid, [role='combobox']`));
+    dropdowns.filter((dropdown) => isAccountDropdown(dropdown) && getCurrentAccount(dropdown)).forEach(injectNear);
   }
 
   ah.features.waveAccountSwitcher.ensure = ensure;
@@ -2182,8 +2240,8 @@
   }
 
   function orderFromButton(button) {
-    const root = button.closest(".order-item-content-opt, .order-item, [data-order-id], [class*='order']") ||
-      ah.sites.aliexpress.extractOrder.findOrderRoot();
+    const row = button.closest(".ah-ae-cad-row, .ae-helper-cad-row, [data-ah-cad-total]") || button;
+    const root = ah.sites.aliexpress.extractOrder.findOrderRoot(row);
     return {
       orderId: ah.sites.aliexpress.extractOrder.extractOrderId(root),
       orderDate: ah.sites.aliexpress.extractOrder.extractOrderDate(root),
@@ -2196,7 +2254,7 @@
   async function sendToWave(button) {
     const order = orderFromButton(button);
     if (!order.orderId) {
-      setButtonState(button, "Failed: missing order ID", "warn");
+      setButtonState(button, "Could not find order ID on this order card", "warn");
       return;
     }
     if (ah.features.aliToWave.duplicateGuard.isImported(order.orderId) && !ah.core.settings.get("aliToWave.allowReimport", false)) {

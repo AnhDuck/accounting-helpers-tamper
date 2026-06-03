@@ -23,11 +23,11 @@
       .ah-button:hover { background: #216a7e; }
       .ah-button:disabled { cursor: default; opacity: .55; }
       .ah-button-secondary {
-        background: #fff;
+        background: #f1f4f5;
         border-color: #a8b7bd;
         color: #16343d;
       }
-      .ah-button-secondary:hover { background: #eef5f7; }
+      .ah-button-secondary:hover { background: #e3eaed; }
       .ah-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
       .ah-toast-layer {
         bottom: 18px;

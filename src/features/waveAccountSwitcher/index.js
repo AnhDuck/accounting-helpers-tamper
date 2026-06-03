@@ -4,6 +4,7 @@
   ah.features.waveAccountSwitcher = ah.features.waveAccountSwitcher || {};
 
   const injectedAttr = "data-ah-wave-account-switcher";
+  const accountDropdownSelector = ".transactions-list-v2__anchor-transaction__edit__field--account__select";
   let busy = false;
 
   function sleep(ms) {
@@ -12,12 +13,37 @@
 
   function findAccountDropdown(root) {
     const scope = root || document;
-    return scope.querySelector(".transactions-list-v2__anchor-transaction__edit__field--account__select") ||
-      ah.core.dom.qsa(".wv-select.wv-select--fluid", scope).find((dropdown) => {
-        const label = ah.core.dom.text(dropdown.querySelector(".wv-select__label"));
-        return /card|account|cash|bank|credit/i.test(label);
-      }) ||
+    return ah.core.dom.visible(ah.core.dom.qsa(`${accountDropdownSelector}, .wv-select.wv-select--fluid, [role='combobox']`, scope))
+      .find(isAccountDropdown) ||
       ah.core.dom.findFieldByLabel(scope, ["account", "payment account"]);
+  }
+
+  function hasAccountLabel(text) {
+    return /^(account|payment account)\b/i.test(String(text || "").trim());
+  }
+
+  function isAccountDropdown(dropdown) {
+    if (!dropdown) return false;
+    if (dropdown.matches(accountDropdownSelector)) return true;
+    const aria = dropdown.getAttribute("aria-label") || dropdown.getAttribute("name") || dropdown.getAttribute("data-testid");
+    if (hasAccountLabel(aria)) return true;
+
+    let node = dropdown;
+    for (let depth = 0; node && depth < 5; depth += 1, node = node.parentElement) {
+      const label = node.querySelector?.("label");
+      if (label && !dropdown.contains(label) && hasAccountLabel(ah.core.dom.text(label))) return true;
+
+      const siblings = Array.from(node.parentElement?.children || []);
+      const index = siblings.indexOf(node);
+      const previousText = siblings.slice(0, Math.max(0, index)).reverse()
+        .map((item) => ah.core.dom.text(item))
+        .find(Boolean);
+      if (hasAccountLabel(previousText)) return true;
+
+      const fieldText = ah.core.dom.text(node);
+      if (hasAccountLabel(fieldText) && fieldText.length < 120) return true;
+    }
+    return false;
   }
 
   function getCurrentAccount(dropdown) {
@@ -97,7 +123,7 @@
       const current = getCurrentAccount(dropdown);
       const target = chooseTarget(current);
       if (!dropdown || !target) {
-        ah.ui.toast.show("Configure two account switcher options in settings.", { tone: "warn" });
+        ah.ui.toast.show("Configure Account 1 and Account 2 in settings.", { tone: "warn" });
         return;
       }
       const ok = await switchDirect(dropdown, target);
@@ -113,36 +139,27 @@
     }
   }
 
-  function onCapture(event, path) {
-    const dropdown = findAccountDropdown(event.currentTarget.closest(".anchor-transaction__line-item--singleline, [role='dialog']") || document);
-    const current = getCurrentAccount(dropdown);
-    if (!current) {
-      ah.ui.toast.show("No current account detected.", { tone: "warn" });
-      return;
-    }
-    ah.core.settings.set(path, current);
-    ah.ui.toast.show("Account switcher option saved.");
-  }
-
   function injectNear(dropdown) {
     const target = dropdown.closest(".anchor-transaction__line-item--singleline") || dropdown.parentElement;
     if (!target || target.hasAttribute(injectedAttr)) return;
-    target.setAttribute(injectedAttr, "1");
     const row = ah.core.dom.el("div", { class: "ah-pill-row", style: "margin:8px 0 12px;" });
     if (configuredAccounts().length >= 2) {
-      row.append(ah.core.dom.el("button", { type: "button", class: "ah-button ah-button-secondary", onclick: onSwitch }, "Switch account"));
+      row.append(ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button ah-button-secondary",
+        title: "Switch between Account 1 and Account 2 saved in local Tampermonkey settings.",
+        onclick: onSwitch
+      }, "Switch account"));
     }
-    row.append(
-      ah.core.dom.el("button", { type: "button", class: "ah-button ah-button-secondary", onclick: (event) => onCapture(event, "wave.accounts.amex") }, "Capture as option A"),
-      ah.core.dom.el("button", { type: "button", class: "ah-button ah-button-secondary", onclick: (event) => onCapture(event, "wave.accounts.creditCard") }, "Capture as option B")
-    );
+    if (!row.childElementCount) return;
+    target.setAttribute(injectedAttr, "1");
     target.insertAdjacentElement("afterend", row);
   }
 
   function ensure() {
     if (!ah.sites.wave.detect.isWave()) return;
-    const dropdowns = ah.core.dom.visible(ah.core.dom.qsa(".transactions-list-v2__anchor-transaction__edit__field--account__select, .wv-select.wv-select--fluid"));
-    dropdowns.filter((dropdown) => getCurrentAccount(dropdown)).forEach(injectNear);
+    const dropdowns = ah.core.dom.visible(ah.core.dom.qsa(`${accountDropdownSelector}, .wv-select.wv-select--fluid, [role='combobox']`));
+    dropdowns.filter((dropdown) => isAccountDropdown(dropdown) && getCurrentAccount(dropdown)).forEach(injectNear);
   }
 
   ah.features.waveAccountSwitcher.ensure = ensure;

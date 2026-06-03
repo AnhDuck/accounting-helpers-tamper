@@ -7,8 +7,8 @@
     ["wave.defaultAliExpressAccount", "Default Wave account", "text"],
     ["wave.defaultAliExpressCategory", "Default Wave category", "text"],
     ["wave.descriptionPrefix", "AliExpress description prefix", "text"],
-    ["wave.accounts.amex", "Account switcher option A", "text"],
-    ["wave.accounts.creditCard", "Account switcher option B", "text"],
+    ["wave.accounts.amex", "Account 1", "text"],
+    ["wave.accounts.creditCard", "Account 2", "text"],
     ["aliExpress.defaultCurrency", "AliExpress source currency", "text"],
     ["aliExpress.targetCurrency", "Accounting target currency", "text"]
   ];
@@ -48,10 +48,11 @@
     return wrapper;
   }
 
-  function captureButton(label, path, read) {
+  function captureButton(label, path, read, title) {
     return ah.core.dom.el("button", {
       type: "button",
       class: "ah-button ah-button-secondary",
+      title,
       onclick: () => {
         const value = read();
         if (!value) {
@@ -61,7 +62,7 @@
         const input = document.querySelector(`[data-setting-path="${CSS.escape(path)}"]`);
         if (input) input.value = value;
         ah.core.settings.set(path, value);
-        ah.ui.toast.show("Saved current Wave value.");
+        ah.ui.toast.show(`${label} saved.`);
       }
     }, label);
   }
@@ -87,6 +88,14 @@
       captureRow.append(
         captureButton("Use current account", "wave.defaultAliExpressAccount", () =>
           ah.sites.wave.transactionModal.readField(["account", "payment account"])
+        ),
+        captureButton("Save current account as Account 1", "wave.accounts.amex", () =>
+          ah.sites.wave.transactionModal.readField(["account", "payment account"]),
+          "Save the current Wave Account field as Account 1 in local Tampermonkey settings. Switch account uses Account 1 and Account 2."
+        ),
+        captureButton("Save current account as Account 2", "wave.accounts.creditCard", () =>
+          ah.sites.wave.transactionModal.readField(["account", "payment account"]),
+          "Save the current Wave Account field as Account 2 in local Tampermonkey settings. Switch account uses Account 1 and Account 2."
         ),
         captureButton("Use current category", "wave.defaultAliExpressCategory", () =>
           ah.sites.wave.transactionModal.readField(["category"])

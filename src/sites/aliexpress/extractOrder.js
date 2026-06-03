@@ -3,15 +3,10 @@
   ah.sites = ah.sites || {};
   ah.sites.aliexpress = ah.sites.aliexpress || {};
 
-  function findOrderRoot() {
-    const sendButton = document.getElementById("ah-send-to-wave");
-    return sendButton?.closest(ah.sites.aliexpress.selectors.orderContainers) ||
-      ah.core.dom.visible(ah.core.dom.qsa(ah.sites.aliexpress.selectors.orderContainers))[0] ||
-      document.body;
-  }
-
-  function extractOrderId(root) {
-    const source = root || findOrderRoot();
+  function directOrderId(source) {
+    if (!source) return "";
+    const ownAttr = source.getAttribute?.("data-order-id");
+    if (ownAttr) return ownAttr;
     const fromAttr = ah.core.dom.qsa("[data-order-id]", source).map((node) => node.getAttribute("data-order-id")).find(Boolean);
     if (fromAttr) return fromAttr;
 
@@ -20,6 +15,30 @@
     if (labelMatch) return labelMatch[1];
     const longNumber = bodyText.match(/\b\d{12,20}\b/);
     return longNumber ? longNumber[0] : "";
+  }
+
+  function hasOrderPayloadContext(source) {
+    return !!source?.querySelector?.(".ah-send-to-wave, .ah-ae-cad-row, .ae-helper-cad-row, [data-ah-cad-total]");
+  }
+
+  function findOrderRoot(startNode) {
+    const start = startNode?.nodeType === Node.ELEMENT_NODE ? startNode : startNode?.parentElement;
+    const fallbackStart = start || document.querySelector(".ah-send-to-wave") || document.getElementById("ah-send-to-wave");
+    for (let node = fallbackStart; node && node !== document.documentElement; node = node.parentElement) {
+      if (directOrderId(node) && hasOrderPayloadContext(node)) return node;
+    }
+
+    const closestOrder = fallbackStart?.closest?.(ah.sites.aliexpress.selectors.orderContainers);
+    if (directOrderId(closestOrder)) return closestOrder;
+
+    return ah.core.dom.visible(ah.core.dom.qsa(ah.sites.aliexpress.selectors.orderContainers))
+      .find((node) => directOrderId(node)) ||
+      document.body;
+  }
+
+  function extractOrderId(root) {
+    const source = root || findOrderRoot();
+    return directOrderId(source);
   }
 
   function extractOrderDate(root) {
@@ -40,8 +59,11 @@
 
   function extractCadTotal(root) {
     const source = root || findOrderRoot();
-    const existing = source.querySelector("[data-ah-cad-total]");
-    if (existing) return ah.core.money.parseMoney(existing.getAttribute("data-ah-cad-total"));
+    const existing = [source, ...ah.core.dom.qsa("[data-ah-cad-total]", source)]
+      .map((node) => node.getAttribute?.("data-ah-cad-total") || node.dataset?.value || ah.core.dom.text(node))
+      .map((value) => ah.core.money.parseMoney(value))
+      .find((value) => value !== null);
+    if (existing !== undefined) return existing;
     const text = ah.core.dom.text(source);
     const cad = text.match(/(?:CA\s*\$|CAD\s*)\s*([0-9][\d,]*(?:\.\d{2})?)/i);
     return cad ? ah.core.money.parseMoney(cad[1]) : null;

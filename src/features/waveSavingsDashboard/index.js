@@ -155,6 +155,16 @@
       });
       panel.append(panelClicksEl);
     }
+    if (!panel.querySelector("[data-ah-open-settings]")) {
+      panel.append(ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button ah-button-secondary",
+        "data-ah-open-settings": "1",
+        style: "min-height:28px;padding:5px 8px;",
+        title: "Open Accounting Helpers settings, including local Account 1 and Account 2 setup.",
+        onclick: () => ah.ui.settingsModal.open()
+      }, "Settings"));
+    }
     updateSavingsUI();
   }
 

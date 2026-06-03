@@ -27,8 +27,8 @@
   }
 
   function orderFromButton(button) {
-    const root = button.closest(".order-item-content-opt, .order-item, [data-order-id], [class*='order']") ||
-      ah.sites.aliexpress.extractOrder.findOrderRoot();
+    const row = button.closest(".ah-ae-cad-row, .ae-helper-cad-row, [data-ah-cad-total]") || button;
+    const root = ah.sites.aliexpress.extractOrder.findOrderRoot(row);
     return {
       orderId: ah.sites.aliexpress.extractOrder.extractOrderId(root),
       orderDate: ah.sites.aliexpress.extractOrder.extractOrderDate(root),
@@ -41,7 +41,7 @@
   async function sendToWave(button) {
     const order = orderFromButton(button);
     if (!order.orderId) {
-      setButtonState(button, "Failed: missing order ID", "warn");
+      setButtonState(button, "Could not find order ID on this order card", "warn");
       return;
     }
     if (ah.features.aliToWave.duplicateGuard.isImported(order.orderId) && !ah.core.settings.get("aliToWave.allowReimport", false)) {
