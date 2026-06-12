@@ -44,6 +44,7 @@ const files = [
   "src/ui/settingsModal.js",
   "src/sites/wave/detect.js",
   "src/sites/wave/selectors.js",
+  "src/sites/wave/heartbeat.js",
   "src/sites/wave/dropdowns.js",
   "src/sites/wave/transactionModal.js",
   "src/sites/wave/transactionList.js",

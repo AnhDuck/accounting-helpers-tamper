@@ -31,16 +31,18 @@
     const amount = ah.core.money.formatCurrency(payload.amount.value, payload.amount.currency);
     const content = ah.core.dom.el("div", {}, [
       ah.core.dom.el("strong", {}, `Pending AliExpress order: ${payload.orderId}`),
-      ah.core.dom.el("div", { style: "margin-bottom:8px;" }, amount),
+      ah.core.dom.el("div", { style: "margin-bottom:8px;" }, `CAD amount: ${amount}`),
       ah.core.dom.el("div", { class: "ah-pill-row" }, [
         ah.core.dom.el("button", {
           type: "button",
           class: "ah-button",
+          title: "Fill the currently open Wave edit transaction modal with this staged AliExpress order.",
           onclick: () => fillOpenTransaction(payload)
-        }, "Fill open transaction"),
+        }, "Fill this transaction"),
         ah.core.dom.el("button", {
           type: "button",
           class: "ah-button ah-button-secondary",
+          title: "Remove this staged AliExpress order without marking it imported.",
           onclick: clearPendingPayload
         }, "Clear")
       ])

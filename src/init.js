@@ -36,6 +36,7 @@
     installDebugObject();
 
     if (ah.sites.wave.detect.isWave()) {
+      ah.sites.wave.heartbeat?.ensure?.();
       ah.features.waveSavingsDashboard.ensure();
       ah.features.waveTaxButtons.ensure();
       ah.features.waveAccountSwitcher.ensure();

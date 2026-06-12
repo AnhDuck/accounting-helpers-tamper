@@ -33,6 +33,7 @@
 // @require      http://127.0.0.1:5173/src/ui/settingsModal.js
 // @require      http://127.0.0.1:5173/src/sites/wave/detect.js
 // @require      http://127.0.0.1:5173/src/sites/wave/selectors.js
+// @require      http://127.0.0.1:5173/src/sites/wave/heartbeat.js
 // @require      http://127.0.0.1:5173/src/sites/wave/dropdowns.js
 // @require      http://127.0.0.1:5173/src/sites/wave/transactionModal.js
 // @require      http://127.0.0.1:5173/src/sites/wave/transactionList.js

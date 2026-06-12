@@ -38,7 +38,17 @@
     };
   }
 
-  async function sendToWave(button) {
+  function isWaveOpen() {
+    return !!ah.sites.wave?.heartbeat?.isRecent?.();
+  }
+
+  function openWaveTransactions() {
+    if (typeof GM_openInTab !== "function") return false;
+    GM_openInTab(ah.core.constants.waveTransactionsUrl, { active: true, insert: true });
+    return true;
+  }
+
+  async function stageForWave(button) {
     const order = orderFromButton(button);
     if (!order.orderId) {
       setButtonState(button, "Could not find order ID on this order card", "warn");
@@ -60,13 +70,20 @@
       sourceUrl: order.sourceUrl
     });
 
-    savePendingPayload(payload);
-    setButtonState(button, "Sent to Wave", "disabled");
-    ah.ui.toast.show("AliExpress order staged for Wave.");
-
-    if (ah.core.settings.get("aliToWave.autoOpenWave", false) && typeof GM_openInTab === "function") {
-      GM_openInTab(ah.core.constants.waveTransactionsUrl, { active: true, insert: true });
+    if (!savePendingPayload(payload)) {
+      setButtonState(button, "Stage failed", "warn");
+      ah.ui.toast.show("Could not stage this order for Wave.", { tone: "error" });
+      return;
     }
+    setButtonState(button, "Staged for Wave", "disabled");
+
+    if (isWaveOpen()) {
+      ah.ui.toast.show("Order staged for Wave. Switch to Wave and open a transaction to fill it.");
+      return;
+    }
+
+    ah.ui.toast.show("Order staged for Wave. Opening Wave transactions...");
+    openWaveTransactions();
   }
 
   function injectButton(row) {
@@ -76,8 +93,9 @@
     const button = ah.core.dom.el("button", {
       type: "button",
       class: "ah-button ah-send-to-wave",
-      onclick: () => sendToWave(button)
-    }, "Send to Wave");
+      title: "Stage this AliExpress order in Tampermonkey storage so it can fill an open Wave transaction modal.",
+      onclick: () => stageForWave(button)
+    }, "Stage for Wave");
     row.append(button);
 
     const order = orderFromButton(button);

@@ -36,13 +36,14 @@
       logs: "accountingHelpers.logs",
       savings: "wave.savingsDashboard",
       aliPendingPayload: "aliToWave.pendingPayload",
-      aliImportedOrderIds: "aliToWave.importedOrderIds"
+      aliImportedOrderIds: "aliToWave.importedOrderIds",
+      waveHeartbeat: "wave.heartbeat"
     },
     events: {
       settingsChanged: "accounting-helpers:settings-changed",
       pendingPayloadChanged: "accounting-helpers:pending-payload-changed"
     },
-    waveTransactionsUrl: "https://next.waveapps.com/transactions"
+    waveTransactionsUrl: "https://next.waveapps.com/4fa56888-48ef-445b-b9bc-5fef30b02059/transactions"
   };
 })();
 
@@ -602,6 +603,8 @@
       }
       .ah-modal h2 { font: 700 18px/1.2 system-ui, sans-serif; margin: 0 0 14px; }
       .ah-modal h3 { font: 700 14px/1.2 system-ui, sans-serif; margin: 18px 0 8px; }
+      .ah-settings-section { border-top: 1px solid #d7e0e3; padding-top: 2px; }
+      .ah-help { color: #4d646b; font: 12px/1.35 system-ui, sans-serif; margin: 0 0 8px; }
       .ah-form-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
       .ah-field { display: grid; gap: 4px; }
       .ah-field label { font: 600 12px/1.2 system-ui, sans-serif; }
@@ -701,50 +704,138 @@
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
   ah.ui = ah.ui || {};
 
-  const fields = [
-    ["wave.defaultAliExpressVendor", "Default Wave vendor", "text"],
-    ["wave.defaultAliExpressAccount", "Default Wave account", "text"],
-    ["wave.defaultAliExpressCategory", "Default Wave category", "text"],
-    ["wave.descriptionPrefix", "AliExpress description prefix", "text"],
-    ["wave.accounts.amex", "Account 1", "text"],
-    ["wave.accounts.creditCard", "Account 2", "text"],
-    ["aliExpress.defaultCurrency", "AliExpress source currency", "text"],
-    ["aliExpress.targetCurrency", "Accounting target currency", "text"]
+  const aliExpressFields = [
+    {
+      path: "aliExpress.defaultCurrency",
+      label: "AliExpress source currency",
+      title: "Currency shown by AliExpress before conversion helpers run."
+    },
+    {
+      path: "aliExpress.targetCurrency",
+      label: "Accounting target currency",
+      title: "Currency used by accounting helper displays and staged Wave payloads."
+    }
   ];
 
-  const checks = [
-    ["wave.autoUpdateTaxPopover", "Auto update Wave tax popover"],
-    ["wave.markReviewedAutoSave", "Mark reviewed auto-save"],
-    ["aliToWave.autoOpenWave", "Open Wave after Send to Wave"],
-    ["aliToWave.autoFillPending", "Auto-fill pending payload when a Wave modal is open"],
-    ["aliToWave.autoSaveAfterFill", "Auto-save after AliExpress import"],
-    ["aliToWave.allowReimport", "Allow re-import of already imported AliExpress orders"]
+  const waveDefaultFields = [
+    {
+      path: "wave.defaultAliExpressVendor",
+      label: "Default AliExpress vendor",
+      title: "Wave vendor/payee to use when filling a staged AliExpress order."
+    },
+    {
+      path: "wave.defaultAliExpressAccount",
+      label: "Default Wave account",
+      title: "Wave account field value to use for AliExpress transactions."
+    },
+    {
+      path: "wave.defaultAliExpressCategory",
+      label: "Default Wave category",
+      title: "Wave category field value to use for AliExpress transactions."
+    },
+    {
+      path: "wave.descriptionPrefix",
+      label: "Description prefix",
+      title: "Text placed before the AliExpress order ID in the Wave description."
+    }
   ];
 
-  function inputFor(path, label, type) {
+  const helperFields = [
+    {
+      path: "wave.accounts.amex",
+      label: "Switch account 1",
+      title: "First saved Wave account used by the account switch helper."
+    },
+    {
+      path: "wave.accounts.creditCard",
+      label: "Switch account 2",
+      title: "Second saved Wave account used by the account switch helper."
+    }
+  ];
+
+  const aliToWaveChecks = [
+    {
+      path: "aliToWave.allowReimport",
+      label: "Allow staging already imported AliExpress orders",
+      title: "When off, orders already filled into Wave are disabled on AliExpress."
+    }
+  ];
+
+  const helperChecks = [
+    {
+      path: "wave.autoUpdateTaxPopover",
+      label: "When changing Wave tax, also update the visible tax popover amount",
+      title: "Keeps the Wave tax popover display aligned after the tax helper changes a transaction."
+    },
+    {
+      path: "wave.markReviewedAutoSave",
+      label: "After Mark as reviewed, click Save automatically",
+      title: "Only affects the explicit Mark as reviewed helper button."
+    },
+    {
+      path: "aliToWave.autoSaveAfterFill",
+      label: "After filling an AliExpress payload, click Save when every field was filled",
+      title: "Wave transactions are not saved automatically unless this is enabled."
+    }
+  ];
+
+  function inputFor(field) {
     const wrapper = ah.core.dom.el("div", { class: "ah-field" });
-    const id = `ah-setting-${path.replace(/\W/g, "-")}`;
-    const input = ah.core.dom.el("input", { id, type: type || "text", "data-setting-path": path });
-    input.value = ah.core.settings.get(path, "");
-    wrapper.append(ah.core.dom.el("label", { for: id }, label), input);
+    const id = `ah-setting-${field.path.replace(/\W/g, "-")}`;
+    const input = ah.core.dom.el("input", {
+      id,
+      type: field.type || "text",
+      "data-setting-path": field.path,
+      title: field.title || ""
+    });
+    input.value = ah.core.settings.get(field.path, "");
+    wrapper.append(ah.core.dom.el("label", { for: id, title: field.title || "" }, field.label), input);
+    if (field.help) wrapper.append(ah.core.dom.el("div", { class: "ah-help" }, field.help));
     return wrapper;
   }
 
-  function selectFor(path, label, options) {
+  function selectFor(path, label, options, title) {
     const wrapper = ah.core.dom.el("div", { class: "ah-field" });
     const id = `ah-setting-${path.replace(/\W/g, "-")}`;
-    const select = ah.core.dom.el("select", { id, "data-setting-path": path });
+    const select = ah.core.dom.el("select", { id, "data-setting-path": path, title });
     options.forEach((option) => select.append(ah.core.dom.el("option", { value: option }, option)));
     select.value = ah.core.settings.get(path, options[0]);
-    wrapper.append(ah.core.dom.el("label", { for: id }, label), select);
+    wrapper.append(ah.core.dom.el("label", { for: id, title }, label), select);
     return wrapper;
   }
 
-  function checkFor(path, label) {
-    const input = ah.core.dom.el("input", { type: "checkbox", "data-setting-path": path });
-    input.checked = !!ah.core.settings.get(path, false);
-    const wrapper = ah.core.dom.el("label", { class: "ah-check" }, [input, ah.core.dom.el("span", {}, label)]);
-    return wrapper;
+  function checkFor(item) {
+    const input = ah.core.dom.el("input", { type: "checkbox", "data-setting-path": item.path, title: item.title || "" });
+    input.checked = !!ah.core.settings.get(item.path, false);
+    return ah.core.dom.el("label", { class: "ah-check", title: item.title || "" }, [
+      input,
+      ah.core.dom.el("span", {}, item.label)
+    ]);
+  }
+
+  function help(text) {
+    return ah.core.dom.el("div", { class: "ah-help" }, text);
+  }
+
+  function section(title, children, description) {
+    const node = ah.core.dom.el("section", { class: "ah-settings-section" }, [
+      ah.core.dom.el("h3", {}, title)
+    ]);
+    if (description) node.append(help(description));
+    children.filter(Boolean).forEach((child) => node.append(child));
+    return node;
+  }
+
+  function fieldGrid(fields) {
+    const grid = ah.core.dom.el("div", { class: "ah-form-grid" });
+    fields.forEach((field) => grid.append(inputFor(field)));
+    return grid;
+  }
+
+  function checkGrid(items) {
+    const grid = ah.core.dom.el("div", { class: "ah-form-grid" });
+    items.forEach((item) => grid.append(checkFor(item)));
+    return grid;
   }
 
   function captureButton(label, path, read, title) {
@@ -766,6 +857,37 @@
     }, label);
   }
 
+  function captureSection() {
+    if (!ah.sites.wave?.detect?.isWave()) return null;
+    const captureRow = ah.core.dom.el("div", { class: "ah-pill-row" }, [
+      captureButton("Use current account", "wave.defaultAliExpressAccount", () =>
+        ah.sites.wave.transactionModal.readField(["account", "payment account"]),
+        "Save the current Wave Account field as the default AliExpress account."
+      ),
+      captureButton("Save account 1", "wave.accounts.amex", () =>
+        ah.sites.wave.transactionModal.readField(["account", "payment account"]),
+        "Save the current Wave Account field as switch account 1."
+      ),
+      captureButton("Save account 2", "wave.accounts.creditCard", () =>
+        ah.sites.wave.transactionModal.readField(["account", "payment account"]),
+        "Save the current Wave Account field as switch account 2."
+      ),
+      captureButton("Use current category", "wave.defaultAliExpressCategory", () =>
+        ah.sites.wave.transactionModal.readField(["category"]),
+        "Save the current Wave Category field as the default AliExpress category."
+      ),
+      captureButton("Use current vendor", "wave.defaultAliExpressVendor", () =>
+        ah.sites.wave.transactionModal.readField(["vendor", "payee", "merchant"]),
+        "Save the current Wave Vendor/Payee field as the default AliExpress vendor."
+      )
+    ]);
+    return section(
+      "Capture from current Wave transaction",
+      [captureRow],
+      "Open a Wave edit transaction modal first, then use these buttons to store current field values in Tampermonkey settings."
+    );
+  }
+
   function open() {
     ah.ui.styles.ensureStyles();
     document.getElementById("ah-settings-modal")?.remove();
@@ -775,41 +897,18 @@
     const modal = ah.core.dom.el("div", { class: "ah-modal", role: "dialog", "aria-modal": "true" });
 
     const form = ah.core.dom.el("form", {});
-    const grid = ah.core.dom.el("div", { class: "ah-form-grid" });
-    fields.forEach(([path, label, type]) => grid.append(inputFor(path, label, type)));
-    grid.append(selectFor("wave.defaultAliExpressType", "Default Wave transaction type", ["Withdrawal", "Deposit"]));
-
-    const checkGrid = ah.core.dom.el("div", { class: "ah-form-grid" });
-    checks.forEach(([path, label]) => checkGrid.append(checkFor(path, label)));
-
-    const captureRow = ah.core.dom.el("div", { class: "ah-pill-row" });
-    if (ah.sites.wave?.detect?.isWave()) {
-      captureRow.append(
-        captureButton("Use current account", "wave.defaultAliExpressAccount", () =>
-          ah.sites.wave.transactionModal.readField(["account", "payment account"])
-        ),
-        captureButton("Save current account as Account 1", "wave.accounts.amex", () =>
-          ah.sites.wave.transactionModal.readField(["account", "payment account"]),
-          "Save the current Wave Account field as Account 1 in local Tampermonkey settings. Switch account uses Account 1 and Account 2."
-        ),
-        captureButton("Save current account as Account 2", "wave.accounts.creditCard", () =>
-          ah.sites.wave.transactionModal.readField(["account", "payment account"]),
-          "Save the current Wave Account field as Account 2 in local Tampermonkey settings. Switch account uses Account 1 and Account 2."
-        ),
-        captureButton("Use current category", "wave.defaultAliExpressCategory", () =>
-          ah.sites.wave.transactionModal.readField(["category"])
-        ),
-        captureButton("Use current vendor", "wave.defaultAliExpressVendor", () =>
-          ah.sites.wave.transactionModal.readField(["vendor", "payee", "merchant"])
-        )
-      );
-    }
 
     const actions = ah.core.dom.el("div", { class: "ah-modal-actions" }, [
-      ah.core.dom.el("button", { type: "button", class: "ah-button ah-button-secondary", onclick: close }, "Cancel"),
       ah.core.dom.el("button", {
         type: "button",
         class: "ah-button ah-button-secondary",
+        title: "Close without saving changes.",
+        onclick: close
+      }, "Cancel"),
+      ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button ah-button-secondary",
+        title: "Clear all Accounting Helpers settings stored by Tampermonkey.",
         onclick: () => {
           if (confirm("Reset Accounting Helpers settings?")) {
             ah.core.settings.reset();
@@ -818,20 +917,33 @@
           }
         }
       }, "Reset"),
-      ah.core.dom.el("button", { type: "submit", class: "ah-button" }, "Save")
+      ah.core.dom.el("button", { type: "submit", class: "ah-button", title: "Save settings to Tampermonkey storage." }, "Save")
     ]);
 
-    form.append(
+    const content = [
       ah.core.dom.el("h2", {}, "Accounting Helpers Settings"),
-      ah.core.dom.el("h3", {}, "Wave and AliExpress defaults"),
-      grid,
-      ah.core.dom.el("h3", {}, "Automation"),
-      checkGrid
-    );
-    if (captureRow.childElementCount) {
-      form.append(ah.core.dom.el("h3", {}, "Capture from current Wave transaction"), captureRow);
-    }
-    form.append(actions);
+      section("AliExpress to Wave", [
+        help("Clicking Stage for Wave stores one pending AliExpress order. If no recent Wave tab heartbeat is detected, Wave transactions opens automatically; if Wave is already open, no duplicate tab is opened."),
+        fieldGrid(aliExpressFields),
+        checkGrid(aliToWaveChecks)
+      ]),
+      section("Wave transaction defaults", [
+        fieldGrid(waveDefaultFields),
+        selectFor(
+          "wave.defaultAliExpressType",
+          "Default Wave transaction type",
+          ["Withdrawal", "Deposit"],
+          "Wave transaction type to use when filling a staged AliExpress order."
+        )
+      ]),
+      section("Wave transaction helpers", [
+        fieldGrid(helperFields),
+        checkGrid(helperChecks)
+      ]),
+      captureSection(),
+      actions
+    ].filter(Boolean);
+    form.append(...content);
 
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -905,6 +1017,45 @@
     fields: "input, textarea, select, [contenteditable='true'], [role='combobox']",
     transactionRows: "[data-testid*='transaction'], tr, [role='row']"
   };
+})();
+
+
+/* src/sites/wave/heartbeat.js */
+(function () {
+  const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  ah.sites = ah.sites || {};
+  ah.sites.wave = ah.sites.wave || {};
+
+  const HEARTBEAT_INTERVAL_MS = 15000;
+  const HEARTBEAT_RECENT_MS = 45000;
+  const key = ah.core.constants.storageKeys.waveHeartbeat;
+  let timer = null;
+
+  function write() {
+    ah.core.storage.set(key, {
+      timestamp: Date.now(),
+      url: location.href
+    });
+  }
+
+  function read() {
+    return ah.core.storage.get(key, null);
+  }
+
+  function isRecent() {
+    const heartbeat = read();
+    return !!(heartbeat?.timestamp && Date.now() - Number(heartbeat.timestamp) <= HEARTBEAT_RECENT_MS);
+  }
+
+  function ensure() {
+    if (!ah.sites.wave.detect.isWave()) return;
+    write();
+    if (timer) return;
+    timer = setInterval(write, HEARTBEAT_INTERVAL_MS);
+    window.addEventListener("beforeunload", write);
+  }
+
+  ah.sites.wave.heartbeat = { ensure, isRecent, read };
 })();
 
 
@@ -1042,7 +1193,12 @@
   async function fillFromAliPayload(payload) {
     const modal = ah.sites.wave.transactionModal.findOpenModal();
     if (!modal) {
-      return { ok: false, message: "Open a Wave transaction first." };
+      return {
+        ok: false,
+        filled: [],
+        missing: [],
+        message: "Open a Wave edit transaction modal first, then click Fill this transaction."
+      };
     }
 
     const settings = ah.core.settings.all();
@@ -1054,23 +1210,42 @@
       type: payload.wave?.type || settings.wave.defaultAliExpressType
     };
 
-    const results = [];
-    results.push(["date", await ah.sites.wave.transactionModal.setField(["date"], payload.orderDate)]);
-    results.push(["description", await ah.sites.wave.transactionModal.setField(["description", "notes"], description)]);
-    results.push(["amount", await ah.sites.wave.transactionModal.setField(["amount", "total"], payload.amount?.value)]);
-    results.push(["type", await ah.sites.wave.transactionModal.setField(["type"], defaults.type, { dropdown: true })]);
-    results.push(["account", await ah.sites.wave.transactionModal.setField(["account", "payment account"], defaults.account, { dropdown: true })]);
-    results.push(["category", await ah.sites.wave.transactionModal.setField(["category"], defaults.category, { dropdown: true })]);
-    results.push(["vendor", await ah.sites.wave.transactionModal.setField(["vendor", "payee", "merchant"], defaults.vendor, { dropdown: true })]);
+    async function fillField(name, labels, value, options) {
+      if (value === null || value === undefined || value === "") {
+        return { name, ok: false, reason: "no value configured" };
+      }
+      const field = ah.sites.wave.transactionModal.findField(labels);
+      if (!field) {
+        return { name, ok: false, reason: "field not found" };
+      }
+      const ok = options?.dropdown ?
+        await ah.sites.wave.dropdowns.chooseOption(field, String(value)) :
+        ah.core.react.setFieldValue(field, String(value));
+      return { name, ok, reason: ok ? "" : "field could not be filled" };
+    }
 
-    const missing = results.filter(([, ok]) => !ok).map(([name]) => name);
+    const results = [];
+    results.push(await fillField("date", ["date"], payload.orderDate));
+    results.push(await fillField("description", ["description", "notes"], description));
+    results.push(await fillField("amount", ["amount", "total"], payload.amount?.value));
+    results.push(await fillField("type", ["type"], defaults.type, { dropdown: true }));
+    results.push(await fillField("account", ["account", "payment account"], defaults.account, { dropdown: true }));
+    results.push(await fillField("category", ["category"], defaults.category, { dropdown: true }));
+    results.push(await fillField("vendor", ["vendor", "payee", "merchant"], defaults.vendor, { dropdown: true }));
+
+    const filled = results.filter((result) => result.ok).map((result) => result.name);
+    const missing = results.filter((result) => !result.ok).map((result) => `${result.name} (${result.reason})`);
     if (settings.aliToWave.autoSaveAfterFill && missing.length === 0) {
       ah.sites.wave.transactionModal.clickButton(["Save", "Update"]);
     }
 
     return {
-      ok: missing.length < results.length,
-      message: missing.length ? `Filled what could be found. Missing: ${missing.join(", ")}` : "AliExpress payload filled."
+      ok: filled.length > 0,
+      filled,
+      missing,
+      message: missing.length ?
+        `Partially filled Wave transaction. Filled: ${filled.join(", ") || "none"}. Could not fill: ${missing.join(", ")}.` :
+        `Filled Wave transaction from AliExpress order ${payload.orderId}.`
     };
   }
 
@@ -1855,9 +2030,13 @@
     checkbox.checked = ah.core.settings.get("wave.markReviewedAutoSave", false);
     checkbox.addEventListener("change", () => {
       ah.core.settings.set("wave.markReviewedAutoSave", checkbox.checked);
-      ah.ui.toast.show(`Mark reviewed auto-save ${checkbox.checked ? "ON" : "OFF"}.`);
+      ah.ui.toast.show(`Save after Mark as reviewed ${checkbox.checked ? "ON" : "OFF"}.`);
     });
-    panel.append(ah.core.dom.el("label", { class: "ah-check", style: "white-space:nowrap;" }, [checkbox, "Reviewed auto-save"]));
+    panel.append(ah.core.dom.el("label", {
+      class: "ah-check",
+      style: "white-space:nowrap;",
+      title: "After you click Mark as reviewed, automatically click Save when enabled."
+    }, [checkbox, "Save after reviewed"]));
   }
 
   function ensure() {
@@ -2251,7 +2430,17 @@
     };
   }
 
-  async function sendToWave(button) {
+  function isWaveOpen() {
+    return !!ah.sites.wave?.heartbeat?.isRecent?.();
+  }
+
+  function openWaveTransactions() {
+    if (typeof GM_openInTab !== "function") return false;
+    GM_openInTab(ah.core.constants.waveTransactionsUrl, { active: true, insert: true });
+    return true;
+  }
+
+  async function stageForWave(button) {
     const order = orderFromButton(button);
     if (!order.orderId) {
       setButtonState(button, "Could not find order ID on this order card", "warn");
@@ -2273,13 +2462,20 @@
       sourceUrl: order.sourceUrl
     });
 
-    savePendingPayload(payload);
-    setButtonState(button, "Sent to Wave", "disabled");
-    ah.ui.toast.show("AliExpress order staged for Wave.");
-
-    if (ah.core.settings.get("aliToWave.autoOpenWave", false) && typeof GM_openInTab === "function") {
-      GM_openInTab(ah.core.constants.waveTransactionsUrl, { active: true, insert: true });
+    if (!savePendingPayload(payload)) {
+      setButtonState(button, "Stage failed", "warn");
+      ah.ui.toast.show("Could not stage this order for Wave.", { tone: "error" });
+      return;
     }
+    setButtonState(button, "Staged for Wave", "disabled");
+
+    if (isWaveOpen()) {
+      ah.ui.toast.show("Order staged for Wave. Switch to Wave and open a transaction to fill it.");
+      return;
+    }
+
+    ah.ui.toast.show("Order staged for Wave. Opening Wave transactions...");
+    openWaveTransactions();
   }
 
   function injectButton(row) {
@@ -2289,8 +2485,9 @@
     const button = ah.core.dom.el("button", {
       type: "button",
       class: "ah-button ah-send-to-wave",
-      onclick: () => sendToWave(button)
-    }, "Send to Wave");
+      title: "Stage this AliExpress order in Tampermonkey storage so it can fill an open Wave transaction modal.",
+      onclick: () => stageForWave(button)
+    }, "Stage for Wave");
     row.append(button);
 
     const order = orderFromButton(button);
@@ -2343,16 +2540,18 @@
     const amount = ah.core.money.formatCurrency(payload.amount.value, payload.amount.currency);
     const content = ah.core.dom.el("div", {}, [
       ah.core.dom.el("strong", {}, `Pending AliExpress order: ${payload.orderId}`),
-      ah.core.dom.el("div", { style: "margin-bottom:8px;" }, amount),
+      ah.core.dom.el("div", { style: "margin-bottom:8px;" }, `CAD amount: ${amount}`),
       ah.core.dom.el("div", { class: "ah-pill-row" }, [
         ah.core.dom.el("button", {
           type: "button",
           class: "ah-button",
+          title: "Fill the currently open Wave edit transaction modal with this staged AliExpress order.",
           onclick: () => fillOpenTransaction(payload)
-        }, "Fill open transaction"),
+        }, "Fill this transaction"),
         ah.core.dom.el("button", {
           type: "button",
           class: "ah-button ah-button-secondary",
+          title: "Remove this staged AliExpress order without marking it imported.",
           onclick: clearPendingPayload
         }, "Clear")
       ])
@@ -2426,6 +2625,7 @@
     installDebugObject();
 
     if (ah.sites.wave.detect.isWave()) {
+      ah.sites.wave.heartbeat?.ensure?.();
       ah.features.waveSavingsDashboard.ensure();
       ah.features.waveTaxButtons.ensure();
       ah.features.waveAccountSwitcher.ensure();

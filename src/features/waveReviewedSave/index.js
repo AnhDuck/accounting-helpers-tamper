@@ -52,9 +52,13 @@
     checkbox.checked = ah.core.settings.get("wave.markReviewedAutoSave", false);
     checkbox.addEventListener("change", () => {
       ah.core.settings.set("wave.markReviewedAutoSave", checkbox.checked);
-      ah.ui.toast.show(`Mark reviewed auto-save ${checkbox.checked ? "ON" : "OFF"}.`);
+      ah.ui.toast.show(`Save after Mark as reviewed ${checkbox.checked ? "ON" : "OFF"}.`);
     });
-    panel.append(ah.core.dom.el("label", { class: "ah-check", style: "white-space:nowrap;" }, [checkbox, "Reviewed auto-save"]));
+    panel.append(ah.core.dom.el("label", {
+      class: "ah-check",
+      style: "white-space:nowrap;",
+      title: "After you click Mark as reviewed, automatically click Save when enabled."
+    }, [checkbox, "Save after reviewed"]));
   }
 
   function ensure() {

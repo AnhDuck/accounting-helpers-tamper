@@ -83,6 +83,8 @@
       }
       .ah-modal h2 { font: 700 18px/1.2 system-ui, sans-serif; margin: 0 0 14px; }
       .ah-modal h3 { font: 700 14px/1.2 system-ui, sans-serif; margin: 18px 0 8px; }
+      .ah-settings-section { border-top: 1px solid #d7e0e3; padding-top: 2px; }
+      .ah-help { color: #4d646b; font: 12px/1.35 system-ui, sans-serif; margin: 0 0 8px; }
       .ah-form-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
       .ah-field { display: grid; gap: 4px; }
       .ah-field label { font: 600 12px/1.2 system-ui, sans-serif; }
