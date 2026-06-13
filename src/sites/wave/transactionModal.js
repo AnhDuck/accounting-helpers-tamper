@@ -6,7 +6,20 @@
   function findOpenModal() {
     const selector = ah.sites.wave.selectors.modal;
     const modals = ah.core.dom.visible(ah.core.dom.qsa(selector));
-    return modals.find((modal) => /edit\s+transaction/i.test(ah.core.dom.text(modal))) || modals.at(-1) || null;
+    return modals.find((modal) => /\b(add|edit)\s+transaction\b/i.test(ah.core.dom.text(modal))) || null;
+  }
+
+  function findWaveSelectByLabel(root, labels) {
+    const labelList = (Array.isArray(labels) ? labels : [labels]).map((label) => String(label).toLowerCase());
+    const fields = ah.core.dom.visible(ah.core.dom.qsa(".wv-form-field", root));
+    for (const field of fields) {
+      const label = ah.core.dom.text(field.querySelector(".wv-form-field__label, label")).toLowerCase();
+      if (!labelList.some((item) => label.includes(item))) continue;
+      const controls = ah.core.dom.visible(ah.core.dom.qsa(".wv-select__input, .wv-select, [role='combobox']", field));
+      const control = controls.find((item) => item.classList.contains("wv-select__input")) || controls[0];
+      if (control) return control;
+    }
+    return null;
   }
 
   function findField(labels) {
@@ -29,7 +42,22 @@
       const field = fields.find((item) => item.tagName === "SELECT" && /direction/i.test(item.getAttribute("name") || ""));
       if (field) return field;
     }
+    if (labelList.some((label) => ["account", "category", "vendor", "payee", "merchant"].includes(label))) {
+      const field = findWaveSelectByLabel(root, labels);
+      if (field) return field;
+    }
     return ah.core.dom.findFieldByLabel(root, labels);
+  }
+
+  function hasReadyTransactionFields() {
+    const modal = findOpenModal();
+    return !!(
+      modal &&
+      findField(["date"]) &&
+      findField(["description", "notes"]) &&
+      findField(["amount", "total"]) &&
+      findField(["type"])
+    );
   }
 
   function readField(labels) {
@@ -60,5 +88,5 @@
     return true;
   }
 
-  ah.sites.wave.transactionModal = { findOpenModal, findField, readField, setField, clickButton };
+  ah.sites.wave.transactionModal = { findOpenModal, findField, readField, setField, clickButton, hasReadyTransactionFields };
 })();

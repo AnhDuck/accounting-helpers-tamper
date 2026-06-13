@@ -112,6 +112,12 @@
       help: "Only runs when Wave already has an edit transaction modal open."
     },
     {
+      path: "aliToWave.autoCreateWithdrawal",
+      label: "Create a new Wave withdrawal after staging",
+      title: "When on, a staged AliExpress order opens Add withdrawal in Wave and fills it automatically.",
+      help: "Only runs when Wave is on the transactions page and no transaction modal is already open."
+    },
+    {
       path: "aliToWave.autoSaveAfterFill",
       label: "Save Wave transaction after every field was filled",
       title: "Wave transactions are not saved automatically unless this is enabled.",

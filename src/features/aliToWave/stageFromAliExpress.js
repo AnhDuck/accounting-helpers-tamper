@@ -102,9 +102,13 @@
     refreshStageButtons();
 
     if (await isWaveOpen()) {
+      const autoCreate = ah.core.settings.get("aliToWave.autoCreateWithdrawal", false);
+      const action = autoCreate ?
+        "Wave will create and fill a withdrawal unless a transaction modal is already open." :
+        "Switch to Wave to create or fill a transaction.";
       const message = previous?.orderId && previous.orderId !== payload.orderId ?
-        "Replaced the previously staged AliExpress order. Switch to Wave and fill the open transaction." :
-        "Order staged for Wave. Switch to Wave and open a transaction to fill it.";
+        `Replaced the previously staged AliExpress order. ${action}` :
+        `Order staged for Wave. ${action}`;
       ah.ui.toast.show(message);
       return;
     }

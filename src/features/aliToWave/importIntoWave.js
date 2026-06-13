@@ -7,6 +7,8 @@
   const modalActionsClass = "ah-ali-to-wave-modal-actions";
   const bannerId = "ah-ali-to-wave-banner";
   let autoFillInFlight = false;
+  let createFillInFlight = false;
+  let autoCreateAttemptKey = "";
 
   function pendingPayload() {
     const payload = ah.core.storage.get(pendingKey, null);
@@ -29,6 +31,51 @@
     return result;
   }
 
+  function payloadKey(payload) {
+    return [
+      payload?.orderId || "",
+      payload?.amount?.value || "",
+      payload?.amount?.currency || ""
+    ].join("|");
+  }
+
+  async function createWithdrawalAndFill(payload, options) {
+    if (createFillInFlight) {
+      return { ok: false, message: "Wave helper is already creating a withdrawal." };
+    }
+    if (ah.sites.wave.transactionModal.findOpenModal()) {
+      const result = { ok: false, message: "A Wave transaction modal is already open. Review it or close it before creating a new withdrawal." };
+      if (options?.toast !== false) ah.ui.toast.show(result.message, { tone: "warn" });
+      return result;
+    }
+
+    createFillInFlight = true;
+    try {
+      const opened = await ah.sites.wave.transactionList.openAddWithdrawalModal();
+      if (!opened.ok) {
+        if (options?.toast !== false) ah.ui.toast.show(opened.message, { tone: "warn" });
+        return opened;
+      }
+      const result = await fillOpenTransaction(payload);
+      recordCreateFillSavings(opened, result);
+      return result;
+    } finally {
+      createFillInFlight = false;
+    }
+  }
+
+  function recordCreateFillSavings(opened, result) {
+    if (!result?.ok || result.missing?.length) return;
+    const steps = [...(opened.clicksSavedSteps || []), "Fill staged AliExpress order"];
+    if (result.saved) steps.push("Save transaction");
+    if (!steps.length) return;
+    ah.features.waveSavingsDashboard?.addClicks?.(
+      steps.length,
+      `AliExpress to Wave: ${steps.join(", ")}`
+    );
+    ah.ui.toast.show(`Saved ${steps.length} clicks: ${steps.join(", ")}.`, { title: "Clicks saved" });
+  }
+
   function renderBanner(payload) {
     const amount = ah.core.money.formatCurrency(payload.amount.value, payload.amount.currency);
     const content = ah.core.dom.el("div", {}, [
@@ -39,6 +86,12 @@
         ah.core.dom.el("button", {
           type: "button",
           class: "ah-button",
+          title: "Open Wave's Add withdrawal modal, then fill it with this staged AliExpress order.",
+          onclick: () => createWithdrawalAndFill(payload)
+        }, "Create withdrawal + fill"),
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button ah-button-secondary",
           title: "Fill the currently open Wave edit transaction modal with this staged AliExpress order.",
           onclick: () => fillOpenTransaction(payload)
         }, "Fill this transaction"),
@@ -127,19 +180,38 @@
     }
   }
 
+  async function maybeAutoCreateWithdrawal(payload) {
+    const key = payloadKey(payload);
+    if (createFillInFlight || autoCreateAttemptKey === key) return;
+    if (!ah.core.settings.get("aliToWave.autoCreateWithdrawal", false)) return;
+    if (ah.sites.wave.transactionModal.findOpenModal()) return;
+    autoCreateAttemptKey = key;
+    const result = await createWithdrawalAndFill(payload, { toast: false });
+    if (!result.ok) {
+      ah.ui.toast.show(result.message, { tone: "warn" });
+    }
+  }
+
   function ensureWaveImportUI() {
     if (!ah.sites.wave.detect.isWave()) return;
     const payload = pendingPayload();
     if (!payload) {
       ah.ui.floatingPanel.remove(bannerId);
       removeModalActions();
+      autoCreateAttemptKey = "";
       return;
     }
-    ensureBanner(payload);
-    ensureModalActions(payload);
+    if (ah.sites.wave.transactionModal.findOpenModal()) {
+      ah.ui.floatingPanel.remove(bannerId);
+      ensureModalActions(payload);
+    } else {
+      removeModalActions();
+      ensureBanner(payload);
+    }
+    maybeAutoCreateWithdrawal(payload);
     maybeAutoFill(payload);
   }
 
-  ah.features.aliToWave.importIntoWave = { pendingPayload, clearPendingPayload, fillOpenTransaction };
+  ah.features.aliToWave.importIntoWave = { pendingPayload, clearPendingPayload, fillOpenTransaction, createWithdrawalAndFill };
   ah.features.aliToWave.ensureWaveImportUI = ensureWaveImportUI;
 })();

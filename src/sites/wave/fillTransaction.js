@@ -23,9 +23,20 @@
       type: payload.wave?.type || settings.wave.defaultAliExpressType
     };
 
+    async function ensureVendorField(value) {
+      if (!value) return;
+      if (ah.sites.wave.transactionModal.findField(["vendor", "payee", "merchant"])) return;
+      if (!ah.sites.wave.transactionModal.clickButton(["Add vendor"])) return;
+      try {
+        await ah.core.dom.waitFor(() => ah.sites.wave.transactionModal.findField(["vendor", "payee", "merchant"]), { timeout: 3000, interval: 100 });
+      } catch (_error) {
+        // The normal field-fill path below will report the missing vendor field.
+      }
+    }
+
     async function fillField(name, labels, value, options) {
       if (value === null || value === undefined || value === "") {
-        return { name, ok: false, reason: "no value configured" };
+        return { name, ok: true, skipped: true, reason: "no value configured" };
       }
       const field = ah.sites.wave.transactionModal.findField(labels);
       if (!field) {
@@ -38,6 +49,7 @@
     }
 
     const results = [];
+    await ensureVendorField(defaults.vendor);
     results.push(await fillField("date", ["date"], payload.orderDate));
     results.push(await fillField("description", ["description", "notes"], description));
     results.push(await fillField("amount", ["amount", "total"], payload.amount?.value));
@@ -46,16 +58,20 @@
     results.push(await fillField("category", ["category"], defaults.category, { dropdown: true }));
     results.push(await fillField("vendor", ["vendor", "payee", "merchant"], defaults.vendor, { dropdown: true }));
 
-    const filled = results.filter((result) => result.ok).map((result) => result.name);
+    const filled = results.filter((result) => result.ok && !result.skipped).map((result) => result.name);
+    const skipped = results.filter((result) => result.skipped).map((result) => result.name);
     const missing = results.filter((result) => !result.ok).map((result) => `${result.name} (${result.reason})`);
+    let saved = false;
     if (settings.aliToWave.autoSaveAfterFill && missing.length === 0) {
-      ah.sites.wave.transactionModal.clickButton(["Save", "Update"]);
+      saved = ah.sites.wave.transactionModal.clickButton(["Save", "Update"]);
     }
 
     return {
       ok: filled.length > 0,
       filled,
+      skipped,
       missing,
+      saved,
       message: missing.length ?
         `Partially filled Wave transaction. Filled: ${filled.join(", ") || "none"}. Could not fill: ${missing.join(", ")}.` :
         `Filled Wave transaction from AliExpress order ${payload.orderId}.`

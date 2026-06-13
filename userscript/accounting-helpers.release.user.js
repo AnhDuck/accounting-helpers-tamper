@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.6
+// @version      0.1.8
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -29,7 +29,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.6",
+    version: "0.1.8",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -215,6 +215,7 @@
     },
     aliToWave: {
       autoOpenWave: false,
+      autoCreateWithdrawal: false,
       autoFillPending: false,
       autoSaveAfterFill: false,
       allowReimport: false
@@ -1150,6 +1151,12 @@
       help: "Only runs when Wave already has an edit transaction modal open."
     },
     {
+      path: "aliToWave.autoCreateWithdrawal",
+      label: "Create a new Wave withdrawal after staging",
+      title: "When on, a staged AliExpress order opens Add withdrawal in Wave and fills it automatically.",
+      help: "Only runs when Wave is on the transactions page and no transaction modal is already open."
+    },
+    {
       path: "aliToWave.autoSaveAfterFill",
       label: "Save Wave transaction after every field was filled",
       title: "Wave transactions are not saved automatically unless this is enabled.",
@@ -1652,7 +1659,20 @@
   function findOpenModal() {
     const selector = ah.sites.wave.selectors.modal;
     const modals = ah.core.dom.visible(ah.core.dom.qsa(selector));
-    return modals.find((modal) => /edit\s+transaction/i.test(ah.core.dom.text(modal))) || modals.at(-1) || null;
+    return modals.find((modal) => /\b(add|edit)\s+transaction\b/i.test(ah.core.dom.text(modal))) || null;
+  }
+
+  function findWaveSelectByLabel(root, labels) {
+    const labelList = (Array.isArray(labels) ? labels : [labels]).map((label) => String(label).toLowerCase());
+    const fields = ah.core.dom.visible(ah.core.dom.qsa(".wv-form-field", root));
+    for (const field of fields) {
+      const label = ah.core.dom.text(field.querySelector(".wv-form-field__label, label")).toLowerCase();
+      if (!labelList.some((item) => label.includes(item))) continue;
+      const controls = ah.core.dom.visible(ah.core.dom.qsa(".wv-select__input, .wv-select, [role='combobox']", field));
+      const control = controls.find((item) => item.classList.contains("wv-select__input")) || controls[0];
+      if (control) return control;
+    }
+    return null;
   }
 
   function findField(labels) {
@@ -1675,7 +1695,22 @@
       const field = fields.find((item) => item.tagName === "SELECT" && /direction/i.test(item.getAttribute("name") || ""));
       if (field) return field;
     }
+    if (labelList.some((label) => ["account", "category", "vendor", "payee", "merchant"].includes(label))) {
+      const field = findWaveSelectByLabel(root, labels);
+      if (field) return field;
+    }
     return ah.core.dom.findFieldByLabel(root, labels);
+  }
+
+  function hasReadyTransactionFields() {
+    const modal = findOpenModal();
+    return !!(
+      modal &&
+      findField(["date"]) &&
+      findField(["description", "notes"]) &&
+      findField(["amount", "total"]) &&
+      findField(["type"])
+    );
   }
 
   function readField(labels) {
@@ -1706,7 +1741,7 @@
     return true;
   }
 
-  ah.sites.wave.transactionModal = { findOpenModal, findField, readField, setField, clickButton };
+  ah.sites.wave.transactionModal = { findOpenModal, findField, readField, setField, clickButton, hasReadyTransactionFields };
 })();
 
 
@@ -1740,7 +1775,54 @@
     return true;
   }
 
-  ah.sites.wave.transactionList = { findCurrentRow, clickCopyOnCurrentRow };
+  function findAddTransactionButton() {
+    return ah.core.dom.visible(ah.core.dom.qsa(ah.sites.wave.selectors.buttons))
+      .find((button) => ah.core.dom.text(button).toLowerCase() === "add transaction") || null;
+  }
+
+  function findAddWithdrawalMenuItem() {
+    return ah.core.dom.visible(ah.core.dom.qsa(ah.sites.wave.selectors.buttons))
+      .find((button) =>
+        ah.core.dom.text(button).toLowerCase() === "add withdrawal" &&
+        button.getAttribute("role") === "menuitem"
+      ) || null;
+  }
+
+  async function openAddWithdrawalModal() {
+    if (ah.sites.wave.transactionModal.findOpenModal()) {
+      return { ok: false, message: "A Wave transaction modal is already open. Use Fill this transaction or close it before creating a new withdrawal." };
+    }
+
+    const addTransaction = findAddTransactionButton();
+    if (!addTransaction) {
+      return { ok: false, message: "Could not find Wave's Add transaction button." };
+    }
+
+    addTransaction.click();
+
+    let addWithdrawal;
+    try {
+      addWithdrawal = await ah.core.dom.waitFor(findAddWithdrawalMenuItem, { timeout: 2500, interval: 100 });
+    } catch (error) {
+      return { ok: false, message: "Could not find Wave's Add withdrawal menu item." };
+    }
+
+    addWithdrawal.click();
+
+    try {
+      await ah.core.dom.waitFor(() => ah.sites.wave.transactionModal.hasReadyTransactionFields(), { timeout: 7000, interval: 100 });
+    } catch (error) {
+      return { ok: false, message: "Wave did not finish loading the Add transaction fields." };
+    }
+
+    return {
+      ok: true,
+      message: "Opened a new Wave withdrawal.",
+      clicksSavedSteps: ["Add transaction", "Add withdrawal"]
+    };
+  }
+
+  ah.sites.wave.transactionList = { findCurrentRow, clickCopyOnCurrentRow, openAddWithdrawalModal };
 })();
 
 
@@ -1770,9 +1852,20 @@
       type: payload.wave?.type || settings.wave.defaultAliExpressType
     };
 
+    async function ensureVendorField(value) {
+      if (!value) return;
+      if (ah.sites.wave.transactionModal.findField(["vendor", "payee", "merchant"])) return;
+      if (!ah.sites.wave.transactionModal.clickButton(["Add vendor"])) return;
+      try {
+        await ah.core.dom.waitFor(() => ah.sites.wave.transactionModal.findField(["vendor", "payee", "merchant"]), { timeout: 3000, interval: 100 });
+      } catch (_error) {
+        // The normal field-fill path below will report the missing vendor field.
+      }
+    }
+
     async function fillField(name, labels, value, options) {
       if (value === null || value === undefined || value === "") {
-        return { name, ok: false, reason: "no value configured" };
+        return { name, ok: true, skipped: true, reason: "no value configured" };
       }
       const field = ah.sites.wave.transactionModal.findField(labels);
       if (!field) {
@@ -1785,6 +1878,7 @@
     }
 
     const results = [];
+    await ensureVendorField(defaults.vendor);
     results.push(await fillField("date", ["date"], payload.orderDate));
     results.push(await fillField("description", ["description", "notes"], description));
     results.push(await fillField("amount", ["amount", "total"], payload.amount?.value));
@@ -1793,16 +1887,20 @@
     results.push(await fillField("category", ["category"], defaults.category, { dropdown: true }));
     results.push(await fillField("vendor", ["vendor", "payee", "merchant"], defaults.vendor, { dropdown: true }));
 
-    const filled = results.filter((result) => result.ok).map((result) => result.name);
+    const filled = results.filter((result) => result.ok && !result.skipped).map((result) => result.name);
+    const skipped = results.filter((result) => result.skipped).map((result) => result.name);
     const missing = results.filter((result) => !result.ok).map((result) => `${result.name} (${result.reason})`);
+    let saved = false;
     if (settings.aliToWave.autoSaveAfterFill && missing.length === 0) {
-      ah.sites.wave.transactionModal.clickButton(["Save", "Update"]);
+      saved = ah.sites.wave.transactionModal.clickButton(["Save", "Update"]);
     }
 
     return {
       ok: filled.length > 0,
       filled,
+      skipped,
       missing,
+      saved,
       message: missing.length ?
         `Partially filled Wave transaction. Filled: ${filled.join(", ") || "none"}. Could not fill: ${missing.join(", ")}.` :
         `Filled Wave transaction from AliExpress order ${payload.orderId}.`
@@ -3070,9 +3168,13 @@
     refreshStageButtons();
 
     if (await isWaveOpen()) {
+      const autoCreate = ah.core.settings.get("aliToWave.autoCreateWithdrawal", false);
+      const action = autoCreate ?
+        "Wave will create and fill a withdrawal unless a transaction modal is already open." :
+        "Switch to Wave to create or fill a transaction.";
       const message = previous?.orderId && previous.orderId !== payload.orderId ?
-        "Replaced the previously staged AliExpress order. Switch to Wave and fill the open transaction." :
-        "Order staged for Wave. Switch to Wave and open a transaction to fill it.";
+        `Replaced the previously staged AliExpress order. ${action}` :
+        `Order staged for Wave. ${action}`;
       ah.ui.toast.show(message);
       return;
     }
@@ -3117,6 +3219,8 @@
   const modalActionsClass = "ah-ali-to-wave-modal-actions";
   const bannerId = "ah-ali-to-wave-banner";
   let autoFillInFlight = false;
+  let createFillInFlight = false;
+  let autoCreateAttemptKey = "";
 
   function pendingPayload() {
     const payload = ah.core.storage.get(pendingKey, null);
@@ -3139,6 +3243,51 @@
     return result;
   }
 
+  function payloadKey(payload) {
+    return [
+      payload?.orderId || "",
+      payload?.amount?.value || "",
+      payload?.amount?.currency || ""
+    ].join("|");
+  }
+
+  async function createWithdrawalAndFill(payload, options) {
+    if (createFillInFlight) {
+      return { ok: false, message: "Wave helper is already creating a withdrawal." };
+    }
+    if (ah.sites.wave.transactionModal.findOpenModal()) {
+      const result = { ok: false, message: "A Wave transaction modal is already open. Review it or close it before creating a new withdrawal." };
+      if (options?.toast !== false) ah.ui.toast.show(result.message, { tone: "warn" });
+      return result;
+    }
+
+    createFillInFlight = true;
+    try {
+      const opened = await ah.sites.wave.transactionList.openAddWithdrawalModal();
+      if (!opened.ok) {
+        if (options?.toast !== false) ah.ui.toast.show(opened.message, { tone: "warn" });
+        return opened;
+      }
+      const result = await fillOpenTransaction(payload);
+      recordCreateFillSavings(opened, result);
+      return result;
+    } finally {
+      createFillInFlight = false;
+    }
+  }
+
+  function recordCreateFillSavings(opened, result) {
+    if (!result?.ok || result.missing?.length) return;
+    const steps = [...(opened.clicksSavedSteps || []), "Fill staged AliExpress order"];
+    if (result.saved) steps.push("Save transaction");
+    if (!steps.length) return;
+    ah.features.waveSavingsDashboard?.addClicks?.(
+      steps.length,
+      `AliExpress to Wave: ${steps.join(", ")}`
+    );
+    ah.ui.toast.show(`Saved ${steps.length} clicks: ${steps.join(", ")}.`, { title: "Clicks saved" });
+  }
+
   function renderBanner(payload) {
     const amount = ah.core.money.formatCurrency(payload.amount.value, payload.amount.currency);
     const content = ah.core.dom.el("div", {}, [
@@ -3149,6 +3298,12 @@
         ah.core.dom.el("button", {
           type: "button",
           class: "ah-button",
+          title: "Open Wave's Add withdrawal modal, then fill it with this staged AliExpress order.",
+          onclick: () => createWithdrawalAndFill(payload)
+        }, "Create withdrawal + fill"),
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button ah-button-secondary",
           title: "Fill the currently open Wave edit transaction modal with this staged AliExpress order.",
           onclick: () => fillOpenTransaction(payload)
         }, "Fill this transaction"),
@@ -3237,20 +3392,39 @@
     }
   }
 
+  async function maybeAutoCreateWithdrawal(payload) {
+    const key = payloadKey(payload);
+    if (createFillInFlight || autoCreateAttemptKey === key) return;
+    if (!ah.core.settings.get("aliToWave.autoCreateWithdrawal", false)) return;
+    if (ah.sites.wave.transactionModal.findOpenModal()) return;
+    autoCreateAttemptKey = key;
+    const result = await createWithdrawalAndFill(payload, { toast: false });
+    if (!result.ok) {
+      ah.ui.toast.show(result.message, { tone: "warn" });
+    }
+  }
+
   function ensureWaveImportUI() {
     if (!ah.sites.wave.detect.isWave()) return;
     const payload = pendingPayload();
     if (!payload) {
       ah.ui.floatingPanel.remove(bannerId);
       removeModalActions();
+      autoCreateAttemptKey = "";
       return;
     }
-    ensureBanner(payload);
-    ensureModalActions(payload);
+    if (ah.sites.wave.transactionModal.findOpenModal()) {
+      ah.ui.floatingPanel.remove(bannerId);
+      ensureModalActions(payload);
+    } else {
+      removeModalActions();
+      ensureBanner(payload);
+    }
+    maybeAutoCreateWithdrawal(payload);
     maybeAutoFill(payload);
   }
 
-  ah.features.aliToWave.importIntoWave = { pendingPayload, clearPendingPayload, fillOpenTransaction };
+  ah.features.aliToWave.importIntoWave = { pendingPayload, clearPendingPayload, fillOpenTransaction, createWithdrawalAndFill };
   ah.features.aliToWave.ensureWaveImportUI = ensureWaveImportUI;
 })();
 

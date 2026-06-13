@@ -25,6 +25,7 @@
     },
     aliToWave: {
       autoOpenWave: false,
+      autoCreateWithdrawal: false,
       autoFillPending: false,
       autoSaveAfterFill: false,
       allowReimport: false
