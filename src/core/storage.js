@@ -2,8 +2,17 @@
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
   ah.core = ah.core || {};
 
-  function hasGm(name) {
-    return typeof window[name] === "function";
+  function gmApi(name) {
+    const apis = {
+      GM_getValue: typeof GM_getValue === "function" ? GM_getValue : globalThis.GM_getValue,
+      GM_setValue: typeof GM_setValue === "function" ? GM_setValue : globalThis.GM_setValue,
+      GM_deleteValue: typeof GM_deleteValue === "function" ? GM_deleteValue : globalThis.GM_deleteValue,
+      GM_listValues: typeof GM_listValues === "function" ? GM_listValues : globalThis.GM_listValues,
+      GM_addValueChangeListener: typeof GM_addValueChangeListener === "function" ?
+        GM_addValueChangeListener :
+        globalThis.GM_addValueChangeListener
+    };
+    return typeof apis[name] === "function" ? apis[name] : null;
   }
 
   function localKey(key) {
@@ -12,7 +21,8 @@
 
   function get(key, fallback) {
     try {
-      if (hasGm("GM_getValue")) return GM_getValue(key, fallback);
+      const gmGetValue = gmApi("GM_getValue");
+      if (gmGetValue) return gmGetValue(key, fallback);
       const raw = localStorage.getItem(localKey(key));
       return raw === null ? fallback : JSON.parse(raw);
     } catch (error) {
@@ -23,8 +33,9 @@
 
   function set(key, value) {
     try {
-      if (hasGm("GM_setValue")) {
-        GM_setValue(key, value);
+      const gmSetValue = gmApi("GM_setValue");
+      if (gmSetValue) {
+        gmSetValue(key, value);
       } else {
         localStorage.setItem(localKey(key), JSON.stringify(value));
       }
@@ -37,7 +48,8 @@
 
   function remove(key) {
     try {
-      if (hasGm("GM_deleteValue")) GM_deleteValue(key);
+      const gmDeleteValue = gmApi("GM_deleteValue");
+      if (gmDeleteValue) gmDeleteValue(key);
       else localStorage.removeItem(localKey(key));
       return true;
     } catch (error) {
@@ -48,7 +60,8 @@
 
   function keys() {
     try {
-      if (hasGm("GM_listValues")) return GM_listValues();
+      const gmListValues = gmApi("GM_listValues");
+      if (gmListValues) return gmListValues();
       const prefix = localKey("");
       return Object.keys(localStorage)
         .filter((key) => key.startsWith(prefix))
@@ -60,8 +73,9 @@
   }
 
   function onChange(key, callback) {
-    if (hasGm("GM_addValueChangeListener")) {
-      return GM_addValueChangeListener(key, (_name, oldValue, newValue, remote) => {
+    const gmAddValueChangeListener = gmApi("GM_addValueChangeListener");
+    if (gmAddValueChangeListener) {
+      return gmAddValueChangeListener(key, (_name, oldValue, newValue, remote) => {
         callback(newValue, oldValue, remote);
       });
     }

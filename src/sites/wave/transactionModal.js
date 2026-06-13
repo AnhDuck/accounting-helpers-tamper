@@ -5,12 +5,30 @@
 
   function findOpenModal() {
     const selector = ah.sites.wave.selectors.modal;
-    return ah.core.dom.visible(ah.core.dom.qsa(selector)).at(-1) || null;
+    const modals = ah.core.dom.visible(ah.core.dom.qsa(selector));
+    return modals.find((modal) => /edit\s+transaction/i.test(ah.core.dom.text(modal))) || modals.at(-1) || null;
   }
 
   function findField(labels) {
     const root = findOpenModal() || document;
-    return ah.core.dom.findFieldByLabel(root, labels);
+    const field = ah.core.dom.findFieldByLabel(root, labels);
+    if (field) return field;
+
+    const labelList = (Array.isArray(labels) ? labels : [labels]).map((label) => String(label).toLowerCase());
+    const fields = ah.core.dom.visible(ah.core.dom.qsa(ah.sites.wave.selectors.fields, root));
+    if (labelList.some((label) => label === "date")) {
+      return fields.find((item) => item.tagName === "INPUT" && /^\d{4}-\d{2}-\d{2}$/.test(item.value || ""));
+    }
+    if (labelList.some((label) => ["description", "notes"].includes(label))) {
+      return fields.find((item) => /description/i.test(item.getAttribute("placeholder") || ""));
+    }
+    if (labelList.some((label) => ["amount", "total"].includes(label))) {
+      return fields.find((item) => /amount/i.test(item.getAttribute("aria-label") || ""));
+    }
+    if (labelList.some((label) => label === "type")) {
+      return fields.find((item) => item.tagName === "SELECT" && /direction/i.test(item.getAttribute("name") || ""));
+    }
+    return null;
   }
 
   function readField(labels) {

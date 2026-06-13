@@ -1,5 +1,6 @@
 (function () {
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  let storageListenersInstalled = false;
 
   function installDebugObject() {
     if (window.AccountingHelpersDebug) return;
@@ -51,9 +52,21 @@
     }
   }
 
+  function installStorageListeners() {
+    if (storageListenersInstalled || typeof ah.core.storage.onChange !== "function") return;
+    storageListenersInstalled = true;
+    ah.core.storage.onChange(ah.core.constants.storageKeys.aliPendingPayload, (payload) => {
+      window.dispatchEvent(new CustomEvent(ah.core.constants.events.pendingPayloadChanged, { detail: payload }));
+    });
+    ah.core.storage.onChange(ah.core.constants.storageKeys.settings, (settings) => {
+      window.dispatchEvent(new CustomEvent(ah.core.constants.events.settingsChanged, { detail: settings }));
+    });
+  }
+
   const scheduleEnsureAll = ah.core.events.rafThrottle(ensureAll);
 
   function start() {
+    installStorageListeners();
     ensureAll();
     const observer = new MutationObserver(scheduleEnsureAll);
     observer.observe(document.documentElement, { childList: true, subtree: true });

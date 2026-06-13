@@ -5,16 +5,23 @@
 
   function directOrderId(source) {
     if (!source) return "";
+    const bodyText = ah.core.dom.text(source);
+    const refMatch = bodyText.match(/(?:ref\.?\s*number\s*[:#]?\s*)(\d{8,})/i);
+    if (refMatch) return refMatch[1];
+    const labelMatch = bodyText.match(/(?:order\s*(?:id|number|no\.?)\s*[:#]?\s*)(\d{8,})/i);
+    if (labelMatch) return labelMatch[1];
+
     const ownAttr = source.getAttribute?.("data-order-id");
     if (ownAttr) return ownAttr;
     const fromAttr = ah.core.dom.qsa("[data-order-id]", source).map((node) => node.getAttribute("data-order-id")).find(Boolean);
     if (fromAttr) return fromAttr;
 
-    const bodyText = ah.core.dom.text(source);
-    const labelMatch = bodyText.match(/(?:order\s*(?:id|number|no\.?)\s*[:#]?\s*)(\d{8,})/i);
-    if (labelMatch) return labelMatch[1];
     const longNumber = bodyText.match(/\b\d{12,20}\b/);
     return longNumber ? longNumber[0] : "";
+  }
+
+  function hasRefNumber(source) {
+    return /ref\.?\s*number\s*[:#]?\s*\d{8,}/i.test(ah.core.dom.text(source));
   }
 
   function hasOrderPayloadContext(source) {
@@ -24,6 +31,9 @@
   function findOrderRoot(startNode) {
     const start = startNode?.nodeType === Node.ELEMENT_NODE ? startNode : startNode?.parentElement;
     const fallbackStart = start || document.querySelector(".ah-send-to-wave") || document.getElementById("ah-send-to-wave");
+    for (let node = fallbackStart; node && node !== document.documentElement; node = node.parentElement) {
+      if (hasRefNumber(node) && hasOrderPayloadContext(node)) return node;
+    }
     for (let node = fallbackStart; node && node !== document.documentElement; node = node.parentElement) {
       if (directOrderId(node) && hasOrderPayloadContext(node)) return node;
     }
@@ -59,8 +69,11 @@
 
   function extractCadTotal(root) {
     const source = root || findOrderRoot();
-    const existing = [source, ...ah.core.dom.qsa("[data-ah-cad-total]", source)]
-      .map((node) => node.getAttribute?.("data-ah-cad-total") || node.dataset?.value || ah.core.dom.text(node))
+    const exactNodes = source.matches?.("[data-ah-cad-total]") ?
+      [source, ...ah.core.dom.qsa("[data-ah-cad-total]", source)] :
+      ah.core.dom.qsa("[data-ah-cad-total]", source);
+    const existing = exactNodes
+      .map((node) => node.dataset?.value || node.getAttribute?.("data-ah-cad-total") || ah.core.dom.text(node))
       .map((value) => ah.core.money.parseMoney(value))
       .find((value) => value !== null);
     if (existing !== undefined) return existing;

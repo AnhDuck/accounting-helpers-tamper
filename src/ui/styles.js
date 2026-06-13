@@ -62,6 +62,20 @@
         z-index: 2147483646;
       }
       .ah-floating-panel strong { display: block; font-size: 14px; margin-bottom: 6px; }
+      .ah-ali-to-wave-modal-actions {
+        align-items: center;
+        background: #f6fafb;
+        border: 1px solid #b9c7cc;
+        border-radius: 6px;
+        color: #182f36;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 12px;
+        padding: 10px;
+      }
+      .ah-ali-to-wave-modal-actions strong { font-size: 13px; margin-right: 4px; }
+      .ah-ali-to-wave-modal-actions span { color: #3d5961; font-weight: 600; margin-right: auto; }
       .ah-modal-backdrop {
         align-items: center;
         background: rgba(18, 35, 40, .52);

@@ -3,7 +3,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.0",
+    version: "0.1.2",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -11,7 +11,8 @@
       savings: "wave.savingsDashboard",
       aliPendingPayload: "aliToWave.pendingPayload",
       aliImportedOrderIds: "aliToWave.importedOrderIds",
-      waveHeartbeat: "wave.heartbeat"
+      waveHeartbeat: "wave.heartbeat",
+      wavePresenceRequest: "wave.presenceRequest"
     },
     events: {
       settingsChanged: "accounting-helpers:settings-changed",

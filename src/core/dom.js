@@ -55,6 +55,10 @@
     labels.push(field.closest("label"));
     labels.push(field.closest("[aria-label]"));
     labels.push(field.closest("[data-testid]"));
+    const parent = field.parentElement;
+    const grandparent = parent?.parentElement;
+    const previous = parent?.previousElementSibling || field.previousElementSibling;
+    labels.push(parent, grandparent, previous);
     return labels.map(text).join(" ").toLowerCase();
   }
 

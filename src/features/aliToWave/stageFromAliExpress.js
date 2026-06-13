@@ -26,19 +26,42 @@
     return ok;
   }
 
+  function findStageButtons() {
+    return ah.core.dom.qsa(".ah-send-to-wave");
+  }
+
   function orderFromButton(button) {
     const row = button.closest(".ah-ae-cad-row, .ae-helper-cad-row, [data-ah-cad-total]") || button;
     const root = ah.sites.aliexpress.extractOrder.findOrderRoot(row);
     return {
       orderId: ah.sites.aliexpress.extractOrder.extractOrderId(root),
       orderDate: ah.sites.aliexpress.extractOrder.extractOrderDate(root),
-      cadTotal: ah.sites.aliexpress.extractOrder.extractCadTotal(root),
+      cadTotal: ah.sites.aliexpress.extractOrder.extractCadTotal(row) ?? ah.sites.aliexpress.extractOrder.extractCadTotal(root),
       sourceUrl: location.href,
       root
     };
   }
 
-  function isWaveOpen() {
+  function refreshStageButtons() {
+    const pending = pendingPayload();
+    findStageButtons().forEach((button) => {
+      const order = orderFromButton(button);
+      if (order.orderId && ah.features.aliToWave.duplicateGuard.isImported(order.orderId) && !ah.core.settings.get("aliToWave.allowReimport", false)) {
+        setButtonState(button, "Already imported", "disabled");
+        return;
+      }
+      if (pending?.orderId && order.orderId === pending.orderId) {
+        setButtonState(button, "Staged for Wave", "disabled");
+        return;
+      }
+      setButtonState(button, "Stage for Wave", "");
+    });
+  }
+
+  async function isWaveOpen() {
+    if (typeof ah.sites.wave?.heartbeat?.requestRecent === "function") {
+      return ah.sites.wave.heartbeat.requestRecent();
+    }
     return !!ah.sites.wave?.heartbeat?.isRecent?.();
   }
 
@@ -70,15 +93,19 @@
       sourceUrl: order.sourceUrl
     });
 
+    const previous = pendingPayload();
     if (!savePendingPayload(payload)) {
       setButtonState(button, "Stage failed", "warn");
       ah.ui.toast.show("Could not stage this order for Wave.", { tone: "error" });
       return;
     }
-    setButtonState(button, "Staged for Wave", "disabled");
+    refreshStageButtons();
 
-    if (isWaveOpen()) {
-      ah.ui.toast.show("Order staged for Wave. Switch to Wave and open a transaction to fill it.");
+    if (await isWaveOpen()) {
+      const message = previous?.orderId && previous.orderId !== payload.orderId ?
+        "Replaced the previously staged AliExpress order. Switch to Wave and fill the open transaction." :
+        "Order staged for Wave. Switch to Wave and open a transaction to fill it.";
+      ah.ui.toast.show(message);
       return;
     }
 
@@ -98,15 +125,13 @@
     }, "Stage for Wave");
     row.append(button);
 
-    const order = orderFromButton(button);
-    if (order.orderId && ah.features.aliToWave.duplicateGuard.isImported(order.orderId) && !ah.core.settings.get("aliToWave.allowReimport", false)) {
-      setButtonState(button, "Already imported", "disabled");
-    }
+    refreshStageButtons();
   }
 
   function ensureAliExpressSendButton() {
     if (!ah.sites.aliexpress.detect.isOrderPage()) return;
     document.querySelectorAll(".ah-ae-cad-row, .ae-helper-cad-row").forEach(injectButton);
+    refreshStageButtons();
   }
 
   ah.features.aliToWave.stageFromAliExpress = { pendingPayload, clearPendingPayload, savePendingPayload };

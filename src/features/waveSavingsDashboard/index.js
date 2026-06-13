@@ -144,7 +144,9 @@
       document.body.append(panel);
     }
     if (!panel.querySelector("[data-ah-wave-panel-title]")) {
-      panel.append(ah.core.dom.el("strong", { "data-ah-wave-panel-title": "1" }, "Wave Helpers"));
+      panel.append(ah.core.dom.el("strong", { "data-ah-wave-panel-title": "1" }, `Wave Helpers ${ah.core.constants.version}`));
+    } else {
+      panel.querySelector("[data-ah-wave-panel-title]").textContent = `Wave Helpers ${ah.core.constants.version}`;
     }
     if (!panelClicksEl) {
       panelClicksEl = ah.core.dom.el("button", {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.0
+// @version      0.1.2
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -29,7 +29,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.0",
+    version: "0.1.2",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -37,7 +37,8 @@
       savings: "wave.savingsDashboard",
       aliPendingPayload: "aliToWave.pendingPayload",
       aliImportedOrderIds: "aliToWave.importedOrderIds",
-      waveHeartbeat: "wave.heartbeat"
+      waveHeartbeat: "wave.heartbeat",
+      wavePresenceRequest: "wave.presenceRequest"
     },
     events: {
       settingsChanged: "accounting-helpers:settings-changed",
@@ -98,8 +99,17 @@
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
   ah.core = ah.core || {};
 
-  function hasGm(name) {
-    return typeof window[name] === "function";
+  function gmApi(name) {
+    const apis = {
+      GM_getValue: typeof GM_getValue === "function" ? GM_getValue : globalThis.GM_getValue,
+      GM_setValue: typeof GM_setValue === "function" ? GM_setValue : globalThis.GM_setValue,
+      GM_deleteValue: typeof GM_deleteValue === "function" ? GM_deleteValue : globalThis.GM_deleteValue,
+      GM_listValues: typeof GM_listValues === "function" ? GM_listValues : globalThis.GM_listValues,
+      GM_addValueChangeListener: typeof GM_addValueChangeListener === "function" ?
+        GM_addValueChangeListener :
+        globalThis.GM_addValueChangeListener
+    };
+    return typeof apis[name] === "function" ? apis[name] : null;
   }
 
   function localKey(key) {
@@ -108,7 +118,8 @@
 
   function get(key, fallback) {
     try {
-      if (hasGm("GM_getValue")) return GM_getValue(key, fallback);
+      const gmGetValue = gmApi("GM_getValue");
+      if (gmGetValue) return gmGetValue(key, fallback);
       const raw = localStorage.getItem(localKey(key));
       return raw === null ? fallback : JSON.parse(raw);
     } catch (error) {
@@ -119,8 +130,9 @@
 
   function set(key, value) {
     try {
-      if (hasGm("GM_setValue")) {
-        GM_setValue(key, value);
+      const gmSetValue = gmApi("GM_setValue");
+      if (gmSetValue) {
+        gmSetValue(key, value);
       } else {
         localStorage.setItem(localKey(key), JSON.stringify(value));
       }
@@ -133,7 +145,8 @@
 
   function remove(key) {
     try {
-      if (hasGm("GM_deleteValue")) GM_deleteValue(key);
+      const gmDeleteValue = gmApi("GM_deleteValue");
+      if (gmDeleteValue) gmDeleteValue(key);
       else localStorage.removeItem(localKey(key));
       return true;
     } catch (error) {
@@ -144,7 +157,8 @@
 
   function keys() {
     try {
-      if (hasGm("GM_listValues")) return GM_listValues();
+      const gmListValues = gmApi("GM_listValues");
+      if (gmListValues) return gmListValues();
       const prefix = localKey("");
       return Object.keys(localStorage)
         .filter((key) => key.startsWith(prefix))
@@ -156,8 +170,9 @@
   }
 
   function onChange(key, callback) {
-    if (hasGm("GM_addValueChangeListener")) {
-      return GM_addValueChangeListener(key, (_name, oldValue, newValue, remote) => {
+    const gmAddValueChangeListener = gmApi("GM_addValueChangeListener");
+    if (gmAddValueChangeListener) {
+      return gmAddValueChangeListener(key, (_name, oldValue, newValue, remote) => {
         callback(newValue, oldValue, remote);
       });
     }
@@ -337,6 +352,10 @@
     labels.push(field.closest("label"));
     labels.push(field.closest("[aria-label]"));
     labels.push(field.closest("[data-testid]"));
+    const parent = field.parentElement;
+    const grandparent = parent?.parentElement;
+    const previous = parent?.previousElementSibling || field.previousElementSibling;
+    labels.push(parent, grandparent, previous);
     return labels.map(text).join(" ").toLowerCase();
   }
 
@@ -582,6 +601,20 @@
         z-index: 2147483646;
       }
       .ah-floating-panel strong { display: block; font-size: 14px; margin-bottom: 6px; }
+      .ah-ali-to-wave-modal-actions {
+        align-items: center;
+        background: #f6fafb;
+        border: 1px solid #b9c7cc;
+        border-radius: 6px;
+        color: #182f36;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 12px;
+        padding: 10px;
+      }
+      .ah-ali-to-wave-modal-actions strong { font-size: 13px; margin-right: 4px; }
+      .ah-ali-to-wave-modal-actions span { color: #3d5961; font-weight: 600; margin-right: auto; }
       .ah-modal-backdrop {
         align-items: center;
         background: rgba(18, 35, 40, .52);
@@ -1028,13 +1061,17 @@
 
   const HEARTBEAT_INTERVAL_MS = 15000;
   const HEARTBEAT_RECENT_MS = 45000;
+  const PRESENCE_REQUEST_WAIT_MS = 1200;
   const key = ah.core.constants.storageKeys.waveHeartbeat;
+  const requestKey = ah.core.constants.storageKeys.wavePresenceRequest;
   let timer = null;
+  let listening = false;
 
-  function write() {
+  function write(responseTo) {
     ah.core.storage.set(key, {
       timestamp: Date.now(),
-      url: location.href
+      url: location.href,
+      responseTo: typeof responseTo === "string" ? responseTo : ""
     });
   }
 
@@ -1047,15 +1084,60 @@
     return !!(heartbeat?.timestamp && Date.now() - Number(heartbeat.timestamp) <= HEARTBEAT_RECENT_MS);
   }
 
+  function requestId() {
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  function hasFreshResponse(id, startedAt) {
+    const heartbeat = read();
+    const timestamp = Number(heartbeat?.timestamp || 0);
+    return !!(timestamp >= startedAt && (heartbeat.responseTo === id || Date.now() - timestamp <= HEARTBEAT_RECENT_MS));
+  }
+
+  function requestRecent(timeout) {
+    if (isRecent()) return Promise.resolve(true);
+    const id = requestId();
+    const startedAt = Date.now();
+    if (!ah.core.storage.set(requestKey, { id, timestamp: startedAt, url: location.href })) {
+      return Promise.resolve(isRecent());
+    }
+    return new Promise((resolve) => {
+      const until = startedAt + (timeout || PRESENCE_REQUEST_WAIT_MS);
+      const tick = () => {
+        if (hasFreshResponse(id, startedAt)) {
+          resolve(true);
+          return;
+        }
+        if (Date.now() >= until) {
+          resolve(false);
+          return;
+        }
+        setTimeout(tick, 100);
+      };
+      tick();
+    });
+  }
+
+  function listenForPresenceRequests() {
+    if (listening || typeof ah.core.storage.onChange !== "function") return;
+    listening = true;
+    ah.core.storage.onChange(requestKey, (request, oldRequest) => {
+      if (!ah.sites.wave.detect.isWave()) return;
+      if (!request?.id || request.id === oldRequest?.id) return;
+      write(request.id);
+    });
+  }
+
   function ensure() {
     if (!ah.sites.wave.detect.isWave()) return;
     write();
+    listenForPresenceRequests();
     if (timer) return;
     timer = setInterval(write, HEARTBEAT_INTERVAL_MS);
-    window.addEventListener("beforeunload", write);
+    window.addEventListener("beforeunload", () => write());
   }
 
-  ah.sites.wave.heartbeat = { ensure, isRecent, read };
+  ah.sites.wave.heartbeat = { ensure, isRecent, read, requestRecent };
 })();
 
 
@@ -1110,12 +1192,30 @@
 
   function findOpenModal() {
     const selector = ah.sites.wave.selectors.modal;
-    return ah.core.dom.visible(ah.core.dom.qsa(selector)).at(-1) || null;
+    const modals = ah.core.dom.visible(ah.core.dom.qsa(selector));
+    return modals.find((modal) => /edit\s+transaction/i.test(ah.core.dom.text(modal))) || modals.at(-1) || null;
   }
 
   function findField(labels) {
     const root = findOpenModal() || document;
-    return ah.core.dom.findFieldByLabel(root, labels);
+    const field = ah.core.dom.findFieldByLabel(root, labels);
+    if (field) return field;
+
+    const labelList = (Array.isArray(labels) ? labels : [labels]).map((label) => String(label).toLowerCase());
+    const fields = ah.core.dom.visible(ah.core.dom.qsa(ah.sites.wave.selectors.fields, root));
+    if (labelList.some((label) => label === "date")) {
+      return fields.find((item) => item.tagName === "INPUT" && /^\d{4}-\d{2}-\d{2}$/.test(item.value || ""));
+    }
+    if (labelList.some((label) => ["description", "notes"].includes(label))) {
+      return fields.find((item) => /description/i.test(item.getAttribute("placeholder") || ""));
+    }
+    if (labelList.some((label) => ["amount", "total"].includes(label))) {
+      return fields.find((item) => /amount/i.test(item.getAttribute("aria-label") || ""));
+    }
+    if (labelList.some((label) => label === "type")) {
+      return fields.find((item) => item.tagName === "SELECT" && /direction/i.test(item.getAttribute("name") || ""));
+    }
+    return null;
   }
 
   function readField(labels) {
@@ -1295,16 +1395,23 @@
 
   function directOrderId(source) {
     if (!source) return "";
+    const bodyText = ah.core.dom.text(source);
+    const refMatch = bodyText.match(/(?:ref\.?\s*number\s*[:#]?\s*)(\d{8,})/i);
+    if (refMatch) return refMatch[1];
+    const labelMatch = bodyText.match(/(?:order\s*(?:id|number|no\.?)\s*[:#]?\s*)(\d{8,})/i);
+    if (labelMatch) return labelMatch[1];
+
     const ownAttr = source.getAttribute?.("data-order-id");
     if (ownAttr) return ownAttr;
     const fromAttr = ah.core.dom.qsa("[data-order-id]", source).map((node) => node.getAttribute("data-order-id")).find(Boolean);
     if (fromAttr) return fromAttr;
 
-    const bodyText = ah.core.dom.text(source);
-    const labelMatch = bodyText.match(/(?:order\s*(?:id|number|no\.?)\s*[:#]?\s*)(\d{8,})/i);
-    if (labelMatch) return labelMatch[1];
     const longNumber = bodyText.match(/\b\d{12,20}\b/);
     return longNumber ? longNumber[0] : "";
+  }
+
+  function hasRefNumber(source) {
+    return /ref\.?\s*number\s*[:#]?\s*\d{8,}/i.test(ah.core.dom.text(source));
   }
 
   function hasOrderPayloadContext(source) {
@@ -1314,6 +1421,9 @@
   function findOrderRoot(startNode) {
     const start = startNode?.nodeType === Node.ELEMENT_NODE ? startNode : startNode?.parentElement;
     const fallbackStart = start || document.querySelector(".ah-send-to-wave") || document.getElementById("ah-send-to-wave");
+    for (let node = fallbackStart; node && node !== document.documentElement; node = node.parentElement) {
+      if (hasRefNumber(node) && hasOrderPayloadContext(node)) return node;
+    }
     for (let node = fallbackStart; node && node !== document.documentElement; node = node.parentElement) {
       if (directOrderId(node) && hasOrderPayloadContext(node)) return node;
     }
@@ -1349,8 +1459,11 @@
 
   function extractCadTotal(root) {
     const source = root || findOrderRoot();
-    const existing = [source, ...ah.core.dom.qsa("[data-ah-cad-total]", source)]
-      .map((node) => node.getAttribute?.("data-ah-cad-total") || node.dataset?.value || ah.core.dom.text(node))
+    const exactNodes = source.matches?.("[data-ah-cad-total]") ?
+      [source, ...ah.core.dom.qsa("[data-ah-cad-total]", source)] :
+      ah.core.dom.qsa("[data-ah-cad-total]", source);
+    const existing = exactNodes
+      .map((node) => node.dataset?.value || node.getAttribute?.("data-ah-cad-total") || ah.core.dom.text(node))
       .map((value) => ah.core.money.parseMoney(value))
       .find((value) => value !== null);
     if (existing !== undefined) return existing;
@@ -1522,7 +1635,9 @@
       document.body.append(panel);
     }
     if (!panel.querySelector("[data-ah-wave-panel-title]")) {
-      panel.append(ah.core.dom.el("strong", { "data-ah-wave-panel-title": "1" }, "Wave Helpers"));
+      panel.append(ah.core.dom.el("strong", { "data-ah-wave-panel-title": "1" }, `Wave Helpers ${ah.core.constants.version}`));
+    } else {
+      panel.querySelector("[data-ah-wave-panel-title]").textContent = `Wave Helpers ${ah.core.constants.version}`;
     }
     if (!panelClicksEl) {
       panelClicksEl = ah.core.dom.el("button", {
@@ -2321,7 +2436,7 @@
       version: ALI_TO_WAVE_PAYLOAD_VERSION,
       source: "aliexpress",
       target: "wave",
-      orderId,
+      orderId: String(orderId || ""),
       orderDate,
       amount: {
         value: Number(cadAmount).toFixed(2),
@@ -2340,13 +2455,14 @@
   }
 
   function isValidPayload(payload) {
+    const amount = Number(payload?.amount?.value);
     return !!(
       payload &&
       payload.version === ALI_TO_WAVE_PAYLOAD_VERSION &&
       payload.source === "aliexpress" &&
       payload.target === "wave" &&
       payload.orderId &&
-      payload.amount?.value
+      Number.isFinite(amount)
     );
   }
 
@@ -2418,19 +2534,42 @@
     return ok;
   }
 
+  function findStageButtons() {
+    return ah.core.dom.qsa(".ah-send-to-wave");
+  }
+
   function orderFromButton(button) {
     const row = button.closest(".ah-ae-cad-row, .ae-helper-cad-row, [data-ah-cad-total]") || button;
     const root = ah.sites.aliexpress.extractOrder.findOrderRoot(row);
     return {
       orderId: ah.sites.aliexpress.extractOrder.extractOrderId(root),
       orderDate: ah.sites.aliexpress.extractOrder.extractOrderDate(root),
-      cadTotal: ah.sites.aliexpress.extractOrder.extractCadTotal(root),
+      cadTotal: ah.sites.aliexpress.extractOrder.extractCadTotal(row) ?? ah.sites.aliexpress.extractOrder.extractCadTotal(root),
       sourceUrl: location.href,
       root
     };
   }
 
-  function isWaveOpen() {
+  function refreshStageButtons() {
+    const pending = pendingPayload();
+    findStageButtons().forEach((button) => {
+      const order = orderFromButton(button);
+      if (order.orderId && ah.features.aliToWave.duplicateGuard.isImported(order.orderId) && !ah.core.settings.get("aliToWave.allowReimport", false)) {
+        setButtonState(button, "Already imported", "disabled");
+        return;
+      }
+      if (pending?.orderId && order.orderId === pending.orderId) {
+        setButtonState(button, "Staged for Wave", "disabled");
+        return;
+      }
+      setButtonState(button, "Stage for Wave", "");
+    });
+  }
+
+  async function isWaveOpen() {
+    if (typeof ah.sites.wave?.heartbeat?.requestRecent === "function") {
+      return ah.sites.wave.heartbeat.requestRecent();
+    }
     return !!ah.sites.wave?.heartbeat?.isRecent?.();
   }
 
@@ -2462,15 +2601,19 @@
       sourceUrl: order.sourceUrl
     });
 
+    const previous = pendingPayload();
     if (!savePendingPayload(payload)) {
       setButtonState(button, "Stage failed", "warn");
       ah.ui.toast.show("Could not stage this order for Wave.", { tone: "error" });
       return;
     }
-    setButtonState(button, "Staged for Wave", "disabled");
+    refreshStageButtons();
 
-    if (isWaveOpen()) {
-      ah.ui.toast.show("Order staged for Wave. Switch to Wave and open a transaction to fill it.");
+    if (await isWaveOpen()) {
+      const message = previous?.orderId && previous.orderId !== payload.orderId ?
+        "Replaced the previously staged AliExpress order. Switch to Wave and fill the open transaction." :
+        "Order staged for Wave. Switch to Wave and open a transaction to fill it.";
+      ah.ui.toast.show(message);
       return;
     }
 
@@ -2490,15 +2633,13 @@
     }, "Stage for Wave");
     row.append(button);
 
-    const order = orderFromButton(button);
-    if (order.orderId && ah.features.aliToWave.duplicateGuard.isImported(order.orderId) && !ah.core.settings.get("aliToWave.allowReimport", false)) {
-      setButtonState(button, "Already imported", "disabled");
-    }
+    refreshStageButtons();
   }
 
   function ensureAliExpressSendButton() {
     if (!ah.sites.aliexpress.detect.isOrderPage()) return;
     document.querySelectorAll(".ah-ae-cad-row, .ae-helper-cad-row").forEach(injectButton);
+    refreshStageButtons();
   }
 
   ah.features.aliToWave.stageFromAliExpress = { pendingPayload, clearPendingPayload, savePendingPayload };
@@ -2513,6 +2654,7 @@
   ah.features.aliToWave = ah.features.aliToWave || {};
 
   const pendingKey = ah.core.constants.storageKeys.aliPendingPayload;
+  const modalActionsClass = "ah-ali-to-wave-modal-actions";
   let autoFillInFlight = false;
 
   function pendingPayload() {
@@ -2541,6 +2683,7 @@
     const content = ah.core.dom.el("div", {}, [
       ah.core.dom.el("strong", {}, `Pending AliExpress order: ${payload.orderId}`),
       ah.core.dom.el("div", { style: "margin-bottom:8px;" }, `CAD amount: ${amount}`),
+      ah.core.dom.el("div", { class: "ah-help" }, "One order is staged at a time. Staging another AliExpress order replaces this one."),
       ah.core.dom.el("div", { class: "ah-pill-row" }, [
         ah.core.dom.el("button", {
           type: "button",
@@ -2559,6 +2702,46 @@
     return content;
   }
 
+  function removeModalActions() {
+    document.querySelectorAll(`.${modalActionsClass}`).forEach((node) => node.remove());
+  }
+
+  function renderModalActions(payload) {
+    const amount = ah.core.money.formatCurrency(payload.amount.value, payload.amount.currency);
+    return ah.core.dom.el("div", { class: modalActionsClass }, [
+      ah.core.dom.el("strong", {}, `AliExpress order ${payload.orderId}`),
+      ah.core.dom.el("span", {}, amount),
+      ah.core.dom.el("span", { class: "ah-help" }, "Latest staged order"),
+      ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button",
+        title: "Fill this Wave transaction with the staged AliExpress order.",
+        onclick: () => fillOpenTransaction(payload)
+      }, "Fill AliExpress order"),
+      ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button ah-button-secondary",
+        title: "Remove this staged AliExpress order without marking it imported.",
+        onclick: clearPendingPayload
+      }, "Clear")
+    ]);
+  }
+
+  function ensureModalActions(payload) {
+    const modal = ah.sites.wave.transactionModal.findOpenModal();
+    if (!modal) {
+      removeModalActions();
+      return;
+    }
+    let actions = modal.querySelector(`.${modalActionsClass}`);
+    if (!actions) {
+      actions = renderModalActions(payload);
+      modal.prepend(actions);
+      return;
+    }
+    actions.replaceWith(renderModalActions(payload));
+  }
+
   async function maybeAutoFill(payload) {
     if (autoFillInFlight || !ah.core.settings.get("aliToWave.autoFillPending", false)) return;
     if (!ah.sites.wave.transactionModal.findOpenModal()) return;
@@ -2575,9 +2758,11 @@
     const payload = pendingPayload();
     if (!payload) {
       ah.ui.floatingPanel.remove("ah-ali-to-wave-banner");
+      removeModalActions();
       return;
     }
     ah.ui.floatingPanel.ensure("ah-ali-to-wave-banner", () => renderBanner(payload));
+    ensureModalActions(payload);
     maybeAutoFill(payload);
   }
 
@@ -2589,6 +2774,7 @@
 /* src/init.js */
 (function () {
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  let storageListenersInstalled = false;
 
   function installDebugObject() {
     if (window.AccountingHelpersDebug) return;
@@ -2640,9 +2826,21 @@
     }
   }
 
+  function installStorageListeners() {
+    if (storageListenersInstalled || typeof ah.core.storage.onChange !== "function") return;
+    storageListenersInstalled = true;
+    ah.core.storage.onChange(ah.core.constants.storageKeys.aliPendingPayload, (payload) => {
+      window.dispatchEvent(new CustomEvent(ah.core.constants.events.pendingPayloadChanged, { detail: payload }));
+    });
+    ah.core.storage.onChange(ah.core.constants.storageKeys.settings, (settings) => {
+      window.dispatchEvent(new CustomEvent(ah.core.constants.events.settingsChanged, { detail: settings }));
+    });
+  }
+
   const scheduleEnsureAll = ah.core.events.rafThrottle(ensureAll);
 
   function start() {
+    installStorageListeners();
     ensureAll();
     const observer = new MutationObserver(scheduleEnsureAll);
     observer.observe(document.documentElement, { childList: true, subtree: true });

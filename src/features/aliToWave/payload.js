@@ -10,7 +10,7 @@
       version: ALI_TO_WAVE_PAYLOAD_VERSION,
       source: "aliexpress",
       target: "wave",
-      orderId,
+      orderId: String(orderId || ""),
       orderDate,
       amount: {
         value: Number(cadAmount).toFixed(2),
@@ -29,13 +29,14 @@
   }
 
   function isValidPayload(payload) {
+    const amount = Number(payload?.amount?.value);
     return !!(
       payload &&
       payload.version === ALI_TO_WAVE_PAYLOAD_VERSION &&
       payload.source === "aliexpress" &&
       payload.target === "wave" &&
       payload.orderId &&
-      payload.amount?.value
+      Number.isFinite(amount)
     );
   }
 
