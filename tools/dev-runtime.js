@@ -16,6 +16,7 @@
     "GM_listValues",
     "GM_addValueChangeListener",
     "GM_openInTab",
+    "GM_download",
     "GM_registerMenuCommand",
     "GM_xmlhttpRequest"
   ];
@@ -29,6 +30,7 @@
     GM_listValues: typeof GM_listValues === "function" ? GM_listValues : null,
     GM_addValueChangeListener: typeof GM_addValueChangeListener === "function" ? GM_addValueChangeListener : null,
     GM_openInTab: typeof GM_openInTab === "function" ? GM_openInTab : null,
+    GM_download: typeof GM_download === "function" ? GM_download : null,
     GM_registerMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
     GM_xmlhttpRequest: typeof GM_xmlhttpRequest === "function" ? GM_xmlhttpRequest : null
   };
@@ -197,10 +199,18 @@
     close.className = "ah-dev-status-close";
     close.textContent = "x";
     close.title = "Hide dev status for this page";
-    close.addEventListener("click", () => node.remove());
+    close.addEventListener("click", () => {
+      node.remove();
+      document.documentElement.style.removeProperty("--ah-dev-status-offset");
+    });
     node.append(close);
 
     if (!existing) document.documentElement.append(node);
+    requestAnimationFrame(() => {
+      const rect = node.getBoundingClientRect();
+      const offset = Math.ceil(rect.height + 28);
+      document.documentElement.style.setProperty("--ah-dev-status-offset", offset + "px");
+    });
   }
 
   async function ensureDevStatus() {

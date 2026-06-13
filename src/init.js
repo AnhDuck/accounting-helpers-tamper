@@ -35,6 +35,9 @@
       getPendingAliToWavePayload() {
         return ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null);
       },
+      getPendingWavePayload() {
+        return ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null);
+      },
       clearPendingAliToWavePayload() {
         ah.core.storage.remove(ah.core.constants.storageKeys.aliPendingPayload);
         window.dispatchEvent(new CustomEvent(ah.core.constants.events.pendingPayloadChanged));
@@ -60,6 +63,9 @@
       runAliToWaveDiagnostics() {
         return ah.features.diagnostics.runAliToWaveDiagnostics();
       },
+      runAmazonDiagnostics() {
+        return ah.features.diagnostics.runAmazonDiagnostics();
+      },
       exportDebugReport() {
         return ah.features.diagnostics.exportDebugReport();
       },
@@ -70,7 +76,7 @@
         return ah.features.diagnostics.getLastDiagnostics();
       },
       getLastFillResult() {
-        return ah.features.aliToWave.getLastFillResult?.() || ah.features.aliToWave.lastFillResult || null;
+        return ah.features.aliToWave.getLastFillResult?.() || ah.features.amazonToWave.getLastApplyResult?.() || ah.features.aliToWave.lastFillResult || null;
       }
     });
   }
@@ -90,12 +96,17 @@
       ah.features.waveAccountSwitcher.ensure();
       ah.features.waveReviewedSave.ensure();
       ah.features.aliToWave.ensureWaveImportUI();
+      ah.features.amazonToWave.ensureWaveApplyUI();
     }
 
     if (ah.sites.aliexpress.detect.isAliExpress()) {
       ah.features.aliexpressCadCopy.ensure();
       ah.features.aliexpressCartPerUnit.ensure();
       ah.features.aliToWave.ensureAliExpressSendButton();
+    }
+
+    if (ah.sites.amazon.detect.isOrdersPage()) {
+      ah.features.amazonOrders.ensure();
     }
 
     document.documentElement.dataset.accountingHelpersReadyVersion = ah.core.constants.version;

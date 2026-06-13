@@ -7,6 +7,7 @@
   const panelId = "ah-diagnostics-panel";
   const modalId = "ah-diagnostics-modal";
   let lastDiagnostics = null;
+  let launcherListenerInstalled = false;
 
   function gmFunction(name) {
     const apis = {
@@ -16,7 +17,9 @@
       GM_listValues: typeof GM_listValues === "function" ? GM_listValues : globalThis.GM_listValues,
       GM_addValueChangeListener: typeof GM_addValueChangeListener === "function" ?
         GM_addValueChangeListener :
-        globalThis.GM_addValueChangeListener
+        globalThis.GM_addValueChangeListener,
+      GM_openInTab: typeof GM_openInTab === "function" ? GM_openInTab : globalThis.GM_openInTab,
+      GM_download: typeof GM_download === "function" ? GM_download : globalThis.GM_download
     };
     return typeof apis[name] === "function" ? apis[name] : null;
   }
@@ -27,7 +30,9 @@
       set: !!gmFunction("GM_setValue"),
       delete: !!gmFunction("GM_deleteValue"),
       list: !!gmFunction("GM_listValues"),
-      changeListener: !!gmFunction("GM_addValueChangeListener")
+      changeListener: !!gmFunction("GM_addValueChangeListener"),
+      openInTab: !!gmFunction("GM_openInTab"),
+      download: !!gmFunction("GM_download")
     };
   }
 
@@ -134,12 +139,16 @@
     const stored = payload === undefined ?
       ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null) :
       payload;
-    const valid = ah.features.aliToWave.payload?.isValidPayload?.(stored) || false;
+    const validAli = ah.features.aliToWave.payload?.isValidPayload?.(stored) || false;
+    const validAmazon = ah.features.amazonToWave.payload?.isValidPayload?.(stored) || false;
+    const valid = validAli || validAmazon;
     const errors = [];
     if (stored && !valid) {
-      if (stored.version !== ah.features.aliToWave.payload?.ALI_TO_WAVE_PAYLOAD_VERSION) errors.push("version mismatch");
-      if (stored.source !== "aliexpress") errors.push("source is not aliexpress");
+      if (stored.source === "amazon" && stored.version !== ah.features.amazonToWave.payload?.AMAZON_TO_WAVE_PAYLOAD_VERSION) errors.push("version mismatch");
+      else if (stored.source !== "amazon" && stored.version !== ah.features.aliToWave.payload?.ALI_TO_WAVE_PAYLOAD_VERSION) errors.push("version mismatch");
+      if (!["aliexpress", "amazon"].includes(stored.source)) errors.push("source is not supported");
       if (stored.target !== "wave") errors.push("target is not wave");
+      if (stored.source === "amazon" && stored.mode !== "edit-existing-transaction") errors.push("amazon mode is not edit-existing-transaction");
       if (!stored.orderId) errors.push("missing orderId");
       if (!Number.isFinite(Number(stored.amount?.value))) errors.push("invalid amount");
     }
@@ -148,6 +157,7 @@
       valid,
       source: stored?.source || "",
       target: stored?.target || "",
+      mode: stored?.mode || "",
       orderId: stored?.orderId || "",
       amount: stored?.amount?.value || "",
       currency: stored?.amount?.currency || "",
@@ -162,7 +172,9 @@
       isWave: !!ah.sites.wave?.detect?.isWave?.(),
       isAliExpress: !!ah.sites.aliexpress?.detect?.isAliExpress?.(),
       isAliExpressOrderPage: !!ah.sites.aliexpress?.detect?.isOrderPage?.(),
-      isAliExpressCartPage: !!ah.sites.aliexpress?.detect?.isCartPage?.()
+      isAliExpressCartPage: !!ah.sites.aliexpress?.detect?.isCartPage?.(),
+      isAmazon: !!ah.sites.amazon?.detect?.isAmazon?.(),
+      isAmazonOrdersPage: !!ah.sites.amazon?.detect?.isOrdersPage?.()
     };
   }
 
@@ -295,9 +307,44 @@
     const pending = pendingPayloadDiagnostics(raw);
     return {
       pendingPayload: pending,
-      preflight: raw ? preflightWaveImport(raw) : null,
+      preflight: raw && raw.source === "aliexpress" ? preflightWaveImport(raw) : null,
       importedOrderCount: Object.keys(ah.features.aliToWave.duplicateGuard?.all?.() || {}).length,
       lastFillResult: ah.features.aliToWave.lastFillResult || null
+    };
+  }
+
+  function preflightAmazonApply(payload) {
+    const pending = payload || ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null);
+    const payloadValid = !!ah.features.amazonToWave.payload?.isValidPayload?.(pending);
+    const fields = waveFieldState();
+    const modalOpen = !!ah.sites.wave?.transactionModal?.findOpenModal?.();
+    const warnings = [];
+    const errors = [];
+    const missing = [];
+    if (!pending) errors.push("no pending payload");
+    else if (!payloadValid) errors.push("pending payload is invalid");
+    if (!ah.sites.wave?.detect?.isWave?.()) warnings.push("current page is not Wave");
+    if (modalOpen && !fields.description) missing.push("description");
+    if (modalOpen && !fields.amount) warnings.push("amount field not detected; amount match warning unavailable");
+    if (!modalOpen) warnings.push("open the matching imported Amazon transaction modal before applying");
+    const canFillCurrentModal = modalOpen && fields.description && payloadValid;
+    return {
+      ok: canFillCurrentModal && errors.length === 0,
+      canFillCurrentModal,
+      canCreateWithdrawal: false,
+      missing,
+      warnings,
+      errors,
+      fields
+    };
+  }
+
+  async function amazonToWaveDiagnostics() {
+    const raw = ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null);
+    return {
+      pendingPayload: pendingPayloadDiagnostics(raw),
+      preflight: raw && raw.source === "amazon" ? preflightAmazonApply(raw) : null,
+      lastApplyResult: ah.features.amazonToWave.lastApplyResult || null
     };
   }
 
@@ -306,6 +353,23 @@
       isAliExpress: !!ah.sites.aliexpress?.detect?.isAliExpress?.(),
       isOrderPage: !!ah.sites.aliexpress?.detect?.isOrderPage?.(),
       isCartPage: !!ah.sites.aliexpress?.detect?.isCartPage?.()
+    };
+  }
+
+  function amazonDiagnostics() {
+    return ah.features.amazonOrders?.diagnostics?.() || {
+      isAmazon: !!ah.sites.amazon?.detect?.isAmazon?.(),
+      isOrdersPage: !!ah.sites.amazon?.detect?.isOrdersPage?.(),
+      orderCardsFound: 0,
+      enhancedCards: 0,
+      firstOrder: null,
+      buttons: {
+        copyTitleInjected: false,
+        stageForWaveInjected: false,
+        invoiceButtonsInjected: false
+      },
+      errors: [],
+      warnings: []
     };
   }
 
@@ -322,9 +386,11 @@
       pendingPayload: pendingPayloadDiagnostics(),
       wave: await waveDiagnostics(),
       aliexpress: aliExpressDiagnostics(),
+      amazon: amazonDiagnostics(),
       aliToWave: await aliToWaveDiagnostics(),
+      amazonToWave: await amazonToWaveDiagnostics(),
       recentLogs: ah.core.logger?.getLogs?.().slice(-50) || [],
-      lastFillResult: ah.features.aliToWave.lastFillResult || null
+      lastFillResult: ah.features.aliToWave.lastFillResult || ah.features.amazonToWave.lastApplyResult || null
     };
     lastDiagnostics = report;
     return report;
@@ -388,6 +454,10 @@
     return ok ? payload : null;
   }
 
+  function stageFakeAmazonOrder() {
+    return ah.features.amazonToWave.stageFromAmazon.stageFakeAmazonOrder();
+  }
+
   function clearPendingPayload() {
     ah.features.aliToWave.stageFromAliExpress?.clearPendingPayload?.();
   }
@@ -402,11 +472,11 @@
   function summaryFor(report) {
     const pending = report.pendingPayload;
     const wave = report.wave;
-    const preflight = report.aliToWave?.preflight;
+    const preflight = pending.source === "amazon" ? report.amazonToWave?.preflight : report.aliToWave?.preflight;
     const lines = [
       `Script: ${report.script.name || "(unknown)"} ${report.script.version || ""} (${report.script.mode})`,
       `Storage: ${report.storage.backend}; settings ${report.settings.exists ? "exist" : "missing"}; backup ${report.storage.keys.backupExists ? "exists" : "missing"}; audit ${report.storage.keys.auditLogExists ? "exists" : "missing"}`,
-      `Pending payload: ${pending.exists ? "yes" : "no"}${pending.exists ? `; valid ${pending.valid ? "yes" : "no"}; ${pending.currency} ${pending.amount}; order ${pending.orderId}` : ""}`,
+      `Pending payload: ${pending.exists ? "yes" : "no"}${pending.exists ? `; source ${pending.source}; valid ${pending.valid ? "yes" : "no"}; ${pending.currency} ${pending.amount}; order ${pending.orderId}` : ""}`,
       `Wave: heartbeat ${wave.heartbeatRecent ? "recent" : "not recent"}; modal ${wave.modalOpen ? "open" : "not open"}; dropdowns ${wave.dropdowns.openCount}`,
       `Ready to fill: ${preflight ? (preflight.ok ? "yes" : "no") : "no pending payload"}`
     ];
@@ -483,6 +553,14 @@
             type: "button",
             class: "ah-button ah-button-secondary",
             onclick: async () => {
+              stageFakeAmazonOrder();
+              await runAndRender();
+            }
+          }, "Stage fake Amazon order"),
+          ah.core.dom.el("button", {
+            type: "button",
+            class: "ah-button ah-button-secondary",
+            onclick: async () => {
               clearPendingPayload();
               await runAndRender();
             }
@@ -508,18 +586,42 @@
     document.body.append(backdrop);
   }
 
-  function ensure() {
-    if (!ah.sites.wave?.detect?.isWave?.() && !ah.sites.aliexpress?.detect?.isAliExpress?.()) return;
-    if (document.getElementById(panelId)) return;
-    const panel = ah.core.dom.el("div", { id: panelId }, [
-      ah.core.dom.el("button", {
+  function launcherButton() {
+    const button = ah.core.dom.el("button", {
         type: "button",
         class: "ah-button",
+        "data-ah-diagnostics-launcher": "true",
         title: "Open Accounting Helpers diagnostics and test controls.",
         onclick: openModal
-      }, "Diagnostics/Test")
-    ]);
-    document.body.append(panel);
+      }, "Diagnostics/Test");
+    button.onclick = openModal;
+    return button;
+  }
+
+  function installLauncherListener() {
+    if (launcherListenerInstalled) return;
+    launcherListenerInstalled = true;
+    document.addEventListener("click", (event) => {
+      const target = event.target?.closest?.("[data-ah-diagnostics-launcher='true']");
+      if (!target) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openModal();
+    }, true);
+  }
+
+  function ensure() {
+    if (!ah.sites.wave?.detect?.isWave?.() && !ah.sites.aliexpress?.detect?.isAliExpress?.() && !ah.sites.amazon?.detect?.isAmazon?.()) return;
+    installLauncherListener();
+    let panel = document.getElementById(panelId);
+    if (!panel) {
+      panel = ah.core.dom.el("div", { id: panelId });
+      document.body.append(panel);
+    }
+    const existingButton = panel.querySelector("[data-ah-diagnostics-launcher='true']");
+    if (!existingButton || existingButton.textContent.trim() !== "Diagnostics/Test") {
+      panel.replaceChildren(launcherButton());
+    }
   }
 
   ah.features.aliToWave.preflightWaveImport = preflightWaveImport;
@@ -530,11 +632,14 @@
     runStorageDiagnostics: storageDiagnostics,
     runWaveDiagnostics: waveDiagnostics,
     runAliToWaveDiagnostics: aliToWaveDiagnostics,
+    runAmazonDiagnostics: amazonDiagnostics,
+    runAmazonToWaveDiagnostics: amazonToWaveDiagnostics,
     exportDebugReport,
     copyDebugReport,
     getLastDiagnostics() {
       return lastDiagnostics;
     },
-    stageFakeAliExpressOrder
+    stageFakeAliExpressOrder,
+    stageFakeAmazonOrder
   };
 })();

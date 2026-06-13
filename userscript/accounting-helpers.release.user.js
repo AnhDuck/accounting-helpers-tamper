@@ -1,11 +1,17 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.22
+// @version      0.1.23
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
 // @match        https://www.aliexpress.com/p/shoppingcart/index.html*
+// @match        https://www.amazon.ca/*your-orders*
+// @match        https://www.amazon.ca/*order-history*
+// @match        https://www.amazon.com/*your-orders*
+// @match        https://www.amazon.com/*order-history*
+// @match        https://www.amazon.co.uk/*your-orders*
+// @match        https://www.amazon.co.uk/*order-history*
 // @updateURL    https://raw.githubusercontent.com/AnhDuck/accounting-helpers-tamper/master/userscript/accounting-helpers.release.user.js
 // @downloadURL  https://raw.githubusercontent.com/AnhDuck/accounting-helpers-tamper/master/userscript/accounting-helpers.release.user.js
 // @run-at       document-idle
@@ -17,6 +23,7 @@
 // @grant        GM_listValues
 // @grant        GM_addValueChangeListener
 // @grant        GM_openInTab
+// @grant        GM_download
 // @grant        GM_registerMenuCommand
 // @grant        GM_xmlhttpRequest
 // @connect      open.er-api.com
@@ -29,7 +36,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.22",
+    version: "0.1.23",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -623,6 +630,50 @@
 })();
 
 
+/* src/core/clipboard.js */
+(function () {
+  const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  ah.core = ah.core || {};
+
+  async function writeText(text) {
+    const value = String(text || "");
+    const errors = [];
+    if (typeof GM_setClipboard === "function") {
+      try {
+        GM_setClipboard(value, "text");
+        return true;
+      } catch (error) {
+        errors.push(`GM_setClipboard: ${String(error)}`);
+      }
+    }
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch (error) {
+        errors.push(`navigator.clipboard: ${String(error)}`);
+      }
+    }
+    try {
+      const textarea = ah.core.dom.el("textarea", { style: { position: "fixed", left: "-9999px", top: "0" } }, value);
+      document.body.append(textarea);
+      textarea.focus();
+      textarea.select();
+      const ok = document.execCommand?.("copy") || false;
+      textarea.remove();
+      if (ok) return true;
+      errors.push("document.execCommand copy returned false");
+    } catch (error) {
+      errors.push(`document.execCommand: ${String(error)}`);
+    }
+    ah.core.logger?.warn("Clipboard copy failed", { errors });
+    return false;
+  }
+
+  ah.core.clipboard = { writeText };
+})();
+
+
 /* src/core/react.js */
 (function () {
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
@@ -1143,11 +1194,44 @@
       }
       .ah-ae-row { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
       .ah-ae-total { color: #184f61; font-weight: 700; }
+      .ah-amz-order-row {
+        align-items: center;
+        background: #f6fafb;
+        border: 1px solid #cbd9de;
+        border-radius: 6px;
+        box-sizing: border-box;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0;
+        padding: 10px;
+        width: 100%;
+      }
+      .ah-amz-order-row .ah-button { min-height: 30px; }
+      .ah-amazon-to-wave-modal-actions {
+        align-items: center;
+        background: #f6fafb;
+        border: 1px solid #b9c7cc;
+        border-radius: 6px;
+        color: #182f36;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 12px;
+        padding: 10px;
+      }
+      .ah-amazon-to-wave-modal-actions strong { font-size: 13px; margin-right: 4px; }
+      .ah-amazon-to-wave-modal-actions span { color: #3d5961; font-weight: 600; }
+      .ah-amazon-to-wave-modal-actions .ah-help {
+        flex: 1 1 220px;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
       #ah-diagnostics-panel {
-        bottom: 62px;
+        bottom: var(--ah-dev-status-offset, 84px);
         left: 12px;
         position: fixed;
-        z-index: 2147483646;
+        z-index: 2147483647;
       }
       .ah-diagnostics-modal {
         display: grid;
@@ -2650,6 +2734,401 @@
 })();
 
 
+/* src/sites/amazon/detect.js */
+(function () {
+  const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  ah.sites = ah.sites || {};
+  ah.sites.amazon = ah.sites.amazon || {};
+
+  function isAmazon() {
+    return /(^|\.)amazon\./i.test(location.hostname);
+  }
+
+  function isOrdersPage() {
+    return isAmazon() && /(?:your-orders|order-history)/i.test(location.href);
+  }
+
+  ah.sites.amazon.detect = { isAmazon, isOrdersPage };
+})();
+
+
+/* src/sites/amazon/selectors.js */
+(function () {
+  const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  ah.sites = ah.sites || {};
+  ah.sites.amazon = ah.sites.amazon || {};
+
+  ah.sites.amazon.selectors = {
+    orderCard: [
+      "div.a-box-group",
+      "div[id='orderCard']",
+      "[data-order-id]"
+    ].join(", "),
+    orderHeader: [
+      "#orderCardHeader",
+      "div[id='orderCardHeader']",
+      ".order-info",
+      ".a-box-inner"
+    ].join(", "),
+    itemRow: [
+      ".itemDetails",
+      ".yohtmlc-item",
+      ".a-fixed-left-grid",
+      "[data-component='item']"
+    ].join(", "),
+    productLinkWithinItem: [
+      "a.a-link-normal[href*='/dp/']",
+      "a[href*='/dp/']",
+      "a[href*='/gp/product/']"
+    ].join(", "),
+    qtyEl: [
+      ".itemQuantity",
+      "[class*='quantity']",
+      "[aria-label*='Quantity']"
+    ].join(", "),
+    invoicePopoverSpan: "span.a-declarative[data-action='a-popover'][data-a-popover*='/your-orders/invoice/popover?orderId=']",
+    helperRow: ".ah-amz-order-row"
+  };
+})();
+
+
+/* src/sites/amazon/invoices.js */
+(function () {
+  const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  ah.sites = ah.sites || {};
+  ah.sites.amazon = ah.sites.amazon || {};
+
+  const invoiceInfoPromiseByCard = new WeakMap();
+  let prefetchCounter = 0;
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function parsePopoverData(str) {
+    if (!str) return null;
+    try {
+      return JSON.parse(str);
+    } catch (_error) {
+      const match = str.match(/"url"\s*:\s*"([^"]+)"/);
+      return match?.[1] ? { url: match[1] } : null;
+    }
+  }
+
+  function toAbsoluteUrl(href) {
+    try {
+      return new URL(href, location.origin).toString();
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function getOrderHeaderEl(orderCardEl) {
+    const selectors = ah.sites.amazon.selectors;
+    return orderCardEl.querySelector(selectors.orderHeader) || orderCardEl;
+  }
+
+  function getPopoverElForCard(orderCardEl) {
+    const selectors = ah.sites.amazon.selectors;
+    const headerEl = getOrderHeaderEl(orderCardEl);
+    return headerEl.querySelector(selectors.invoicePopoverSpan) || orderCardEl.querySelector(selectors.invoicePopoverSpan);
+  }
+
+  function getPopoverUrlForCard(orderCardEl) {
+    const popSpan = getPopoverElForCard(orderCardEl);
+    const popData = parsePopoverData(popSpan?.getAttribute("data-a-popover"));
+    return popData?.url ? toAbsoluteUrl(popData.url) : null;
+  }
+
+  function getOrderIdFromPopoverUrl(absPopoverUrl) {
+    try {
+      return new URL(absPopoverUrl).searchParams.get("orderId") || "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function extractInvoiceUrlsFromHtml(htmlText) {
+    const doc = new DOMParser().parseFromString(htmlText, "text/html");
+    const anchors = Array.from(doc.querySelectorAll("a.a-link-normal[href], a[href]"));
+    const pdfUrls = new Set();
+    const fallbackUrls = new Set();
+    anchors.forEach((anchor) => {
+      const href = anchor.getAttribute("href") || "";
+      const text = ah.core.dom.text(anchor);
+      const looksLikeInvoicePdf = /invoice\.pdf/i.test(href);
+      const looksLikeInvoiceText = /^invoice\b/i.test(text);
+      if (looksLikeInvoicePdf) {
+        const abs = toAbsoluteUrl(href);
+        if (abs) pdfUrls.add(abs);
+      } else if (looksLikeInvoiceText) {
+        const abs = toAbsoluteUrl(href);
+        if (abs) fallbackUrls.add(abs);
+      }
+    });
+    return pdfUrls.size ? Array.from(pdfUrls) : Array.from(fallbackUrls);
+  }
+
+  function fetchInvoiceInfo(orderCardEl) {
+    const absPopoverUrl = getPopoverUrlForCard(orderCardEl);
+    if (!absPopoverUrl) {
+      return Promise.resolve({
+        popoverUrl: "",
+        orderId: "",
+        invoiceUrls: [],
+        invoicePopoverFound: false
+      });
+    }
+    const existing = invoiceInfoPromiseByCard.get(orderCardEl);
+    if (existing) return existing;
+    const delay = 120 + (prefetchCounter++ % 12) * 80;
+    const promise = (async () => {
+      await sleep(delay);
+      try {
+        const response = await fetch(absPopoverUrl, { credentials: "include" });
+        const text = await response.text();
+        const invoiceUrls = extractInvoiceUrlsFromHtml(text);
+        return {
+          popoverUrl: absPopoverUrl,
+          orderId: getOrderIdFromPopoverUrl(absPopoverUrl),
+          invoiceUrls,
+          invoicePopoverFound: true
+        };
+      } catch (error) {
+        ah.core.logger?.warn("Amazon invoice popover fetch failed", { message: String(error) });
+        return {
+          popoverUrl: absPopoverUrl,
+          orderId: getOrderIdFromPopoverUrl(absPopoverUrl),
+          invoiceUrls: [],
+          invoicePopoverFound: true,
+          error: String(error)
+        };
+      }
+    })();
+    invoiceInfoPromiseByCard.set(orderCardEl, promise);
+    return promise;
+  }
+
+  function openTab(url, active) {
+    try {
+      if (typeof GM_openInTab === "function") {
+        GM_openInTab(url, { active: !!active, insert: true, setParent: true });
+        return true;
+      }
+    } catch (_error) {
+      // Fall back to window.open below.
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+    return true;
+  }
+
+  function safeFilename(name) {
+    return String(name || "Amazon_Invoice.pdf").replace(/[\\/:*?"<>|]+/g, "_");
+  }
+
+  function anchorDownload(url, filename) {
+    try {
+      const anchor = ah.core.dom.el("a", { href: url, download: filename, style: { display: "none" } });
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+    } catch (_error) {
+      // Best-effort only.
+    }
+  }
+
+  function downloadInvoice(url, orderIdMaybe) {
+    const name = safeFilename(orderIdMaybe ? `Amazon_Invoice_${orderIdMaybe}.pdf` : "Amazon_Invoice.pdf");
+    try {
+      if (typeof GM_download === "function") {
+        GM_download({ url, name, saveAs: false, onerror: () => anchorDownload(url, name) });
+        return;
+      }
+    } catch (_error) {
+      // Fall through to anchor download.
+    }
+    anchorDownload(url, name);
+  }
+
+  ah.sites.amazon.invoices = {
+    getOrderHeaderEl,
+    getPopoverElForCard,
+    getPopoverUrlForCard,
+    extractInvoiceUrlsFromHtml,
+    fetchInvoiceInfo,
+    openTab,
+    downloadInvoice
+  };
+})();
+
+
+/* src/sites/amazon/extractOrder.js */
+(function () {
+  const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  ah.sites = ah.sites || {};
+  ah.sites.amazon = ah.sites.amazon || {};
+
+  const TITLE_MAX_CHARS = 155;
+  const ORDER_ID_RE = /\b\d{3}-\d{7}-\d{7}\b/;
+
+  function normalizeText(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function truncateTitle(title, maxChars) {
+    const value = normalizeText(title);
+    if (value.length > maxChars) return { title: value.slice(0, maxChars), didTrim: true };
+    return { title: value, didTrim: false };
+  }
+
+  function findOrderCards(root) {
+    return ah.core.dom.qsa(ah.sites.amazon.selectors.orderCard, root || document)
+      .filter((card, index, cards) => cards.findIndex((candidate) => candidate === card || candidate.contains(card)) === index);
+  }
+
+  function findProductTitleLink(itemEl) {
+    const links = ah.core.dom.qsa(ah.sites.amazon.selectors.productLinkWithinItem, itemEl)
+      .filter((link) => normalizeText(link.textContent));
+    links.sort((a, b) => normalizeText(b.textContent).length - normalizeText(a.textContent).length);
+    return links[0] || null;
+  }
+
+  function getItemQuantity(itemEl) {
+    const qEl = itemEl.querySelector(ah.sites.amazon.selectors.qtyEl);
+    if (qEl) {
+      const number = Number.parseInt(normalizeText(qEl.textContent).replace(/[^\d]/g, ""), 10);
+      if (Number.isFinite(number) && number > 0) return number;
+    }
+    const text = normalizeText(itemEl.textContent);
+    const match = text.match(/\b(?:Qty|Quantity)\s*[:x]?\s*(\d+)\b/i);
+    if (match?.[1]) {
+      const number = Number.parseInt(match[1], 10);
+      if (Number.isFinite(number) && number > 0) return number;
+    }
+    return 1;
+  }
+
+  function extractProducts(orderCardEl) {
+    const selectors = ah.sites.amazon.selectors;
+    const rows = ah.core.dom.qsa(selectors.itemRow, orderCardEl);
+    const products = [];
+    const seen = new Set();
+    rows.forEach((row) => {
+      const titleLink = findProductTitleLink(row);
+      const title = normalizeText(titleLink?.textContent);
+      if (!title || seen.has(title)) return;
+      seen.add(title);
+      products.push({ qty: getItemQuantity(row), title });
+    });
+    if (products.length) return products;
+
+    ah.core.dom.qsa(selectors.productLinkWithinItem, orderCardEl).forEach((link) => {
+      const title = normalizeText(link.textContent);
+      if (!title || seen.has(title)) return;
+      seen.add(title);
+      products.push({ qty: 1, title });
+    });
+    return products;
+  }
+
+  function extractOrderId(orderCardEl) {
+    const dataId = orderCardEl.getAttribute("data-order-id") || orderCardEl.dataset?.orderId;
+    if (ORDER_ID_RE.test(dataId || "")) return dataId.match(ORDER_ID_RE)[0];
+    const popoverUrl = ah.sites.amazon.invoices?.getPopoverUrlForCard?.(orderCardEl) || "";
+    const fromPopover = popoverUrl.match(/[?&]orderId=([^&]+)/)?.[1];
+    if (fromPopover && ORDER_ID_RE.test(decodeURIComponent(fromPopover))) return decodeURIComponent(fromPopover).match(ORDER_ID_RE)[0];
+    const text = normalizeText(orderCardEl.textContent);
+    return text.match(ORDER_ID_RE)?.[0] || "";
+  }
+
+  function parseAmazonDate(raw) {
+    const value = normalizeText(raw);
+    if (!value) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const parsed = Date.parse(value);
+    if (!Number.isFinite(parsed)) return "";
+    return new Date(parsed).toISOString().slice(0, 10);
+  }
+
+  function extractOrderDate(orderCardEl) {
+    const text = normalizeText(orderCardEl.textContent);
+    const labeled = text.match(/Order\s+placed\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})/i);
+    if (labeled?.[1]) return parseAmazonDate(labeled[1]);
+    const date = text.match(/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s+\d{4}\b/i);
+    return date?.[0] ? parseAmazonDate(date[0]) : "";
+  }
+
+  function inferCurrency(text) {
+    const haystack = `${text || ""} ${location.hostname}`;
+    if (/£|GBP|amazon\.co\.uk/i.test(haystack)) return "GBP";
+    if (/CA\$|CDN\$|CAD|amazon\.ca/i.test(haystack)) return "CAD";
+    if (/US\$|USD|amazon\.com/i.test(haystack)) return "USD";
+    return "CAD";
+  }
+
+  function extractAmount(orderCardEl) {
+    const text = normalizeText(orderCardEl.textContent);
+    const totalMatch = text.match(/(?:Order\s+total|Total)\s*[:\-]?\s*((?:CA\$|CDN\$|US\$|CAD|USD|GBP|£|\$)\s*[\d,]+(?:\.\d{2})?)/i);
+    const fallbackMatch = text.match(/(?:CA\$|CDN\$|US\$|CAD|USD|GBP|£|\$)\s*[\d,]+(?:\.\d{2})?/i);
+    const raw = totalMatch?.[1] || fallbackMatch?.[0] || "";
+    const value = ah.core.money.parseMoney(raw);
+    return {
+      value: value === null ? "" : value.toFixed(2),
+      currency: inferCurrency(raw || text)
+    };
+  }
+
+  function primaryProductTitle(order, maxChars) {
+    const products = order?.products || [];
+    if (!products.length) return "";
+    const first = truncateTitle(products[0].title, maxChars || TITLE_MAX_CHARS).title;
+    if (products.length > 1) return `${products.length} items | ${first}`;
+    return first;
+  }
+
+  function copyTitleTextForOrder(order, maxChars) {
+    const products = order?.products || [];
+    if (!products.length) return "";
+    const title = primaryProductTitle(order, maxChars || TITLE_MAX_CHARS);
+    const qty = Number(products[0].qty);
+    return qty > 1 && products.length === 1 ? `${qty}x ${title}` : title;
+  }
+
+  async function extractOrder(orderCardEl, options) {
+    const products = extractProducts(orderCardEl);
+    const amount = extractAmount(orderCardEl);
+    const invoiceInfo = options?.includeInvoice === false ? null : await ah.sites.amazon.invoices.fetchInvoiceInfo(orderCardEl);
+    const orderId = extractOrderId(orderCardEl) || invoiceInfo?.orderId || "";
+    return {
+      orderId,
+      orderDate: extractOrderDate(orderCardEl),
+      amount,
+      products,
+      invoice: {
+        count: invoiceInfo?.invoiceUrls?.length || 0,
+        urls: invoiceInfo?.invoiceUrls || []
+      },
+      sourceUrl: location.href
+    };
+  }
+
+  ah.sites.amazon.extractOrder = {
+    TITLE_MAX_CHARS,
+    truncateTitle,
+    findOrderCards,
+    findProductTitleLink,
+    getItemQuantity,
+    extractProducts,
+    extractOrderId,
+    extractOrderDate,
+    extractAmount,
+    primaryProductTitle,
+    copyTitleTextForOrder,
+    extractOrder
+  };
+})();
+
+
 /* src/features/waveSavingsDashboard/index.js */
 (function () {
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
@@ -4062,6 +4541,563 @@
 })();
 
 
+/* src/features/amazonToWave/payload.js */
+(function () {
+  const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  ah.features = ah.features || {};
+  ah.features.amazonToWave = ah.features.amazonToWave || {};
+
+  const AMAZON_TO_WAVE_PAYLOAD_VERSION = 1;
+
+  function createSuggestedDescription(order) {
+    const productTitle = ah.sites.amazon.extractOrder.primaryProductTitle(order);
+    const originalMerchant = "AMAZONCOM PAYMENTS-CA";
+    return {
+      originalMerchant,
+      productTitle,
+      suggested: productTitle ? `${originalMerchant} | ${productTitle}` : originalMerchant
+    };
+  }
+
+  function createAmazonToWavePayload(order) {
+    const description = createSuggestedDescription(order);
+    return {
+      version: AMAZON_TO_WAVE_PAYLOAD_VERSION,
+      source: "amazon",
+      target: "wave",
+      mode: "edit-existing-transaction",
+      orderId: String(order?.orderId || ""),
+      orderDate: order?.orderDate || "",
+      amount: {
+        value: Number(order?.amount?.value).toFixed(2),
+        currency: order?.amount?.currency || "CAD"
+      },
+      description,
+      products: Array.isArray(order?.products) ? order.products : [],
+      invoice: {
+        count: Number(order?.invoice?.count || 0),
+        urls: Array.isArray(order?.invoice?.urls) ? order.invoice.urls : []
+      },
+      sourceUrl: order?.sourceUrl || location.href,
+      createdAt: Date.now()
+    };
+  }
+
+  function isValidPayload(payload) {
+    const amount = Number(payload?.amount?.value);
+    return !!(
+      payload &&
+      payload.version === AMAZON_TO_WAVE_PAYLOAD_VERSION &&
+      payload.source === "amazon" &&
+      payload.target === "wave" &&
+      payload.mode === "edit-existing-transaction" &&
+      payload.orderId &&
+      Number.isFinite(amount)
+    );
+  }
+
+  function fakePayload() {
+    const title = "Spartan Industrial - 3\" X 5\" (200 Count) 2 Mil Clear Reclosable Zip Plastic Poly Bags with Resealable Lock Seal Zipper";
+    return {
+      version: AMAZON_TO_WAVE_PAYLOAD_VERSION,
+      source: "amazon",
+      target: "wave",
+      mode: "edit-existing-transaction",
+      orderId: "TEST-AMZ-ORDER-001",
+      orderDate: new Date().toISOString().slice(0, 10),
+      amount: {
+        value: "18.83",
+        currency: "CAD"
+      },
+      description: {
+        originalMerchant: "AMAZONCOM PAYMENTS-CA",
+        productTitle: title,
+        suggested: `AMAZONCOM PAYMENTS-CA | ${title}`
+      },
+      products: [
+        {
+          qty: 1,
+          title
+        }
+      ],
+      invoice: {
+        count: 1,
+        urls: []
+      },
+      sourceUrl: "accounting-helpers-test",
+      createdAt: Date.now(),
+      debug: { fake: true, autoFillSuppressed: true }
+    };
+  }
+
+  ah.features.amazonToWave.payload = {
+    AMAZON_TO_WAVE_PAYLOAD_VERSION,
+    createAmazonToWavePayload,
+    isValidPayload,
+    fakePayload
+  };
+})();
+
+
+/* src/features/amazonToWave/stageFromAmazon.js */
+(function () {
+  const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  ah.features = ah.features || {};
+  ah.features.amazonToWave = ah.features.amazonToWave || {};
+
+  const pendingKey = ah.core.constants.storageKeys.aliPendingPayload;
+
+  function pendingPayload() {
+    return ah.core.storage.get(pendingKey, null);
+  }
+
+  function clearPendingPayload() {
+    ah.core.storage.remove(pendingKey);
+    window.dispatchEvent(new CustomEvent(ah.core.constants.events.pendingPayloadChanged));
+  }
+
+  function savePendingPayload(payload) {
+    const ok = ah.core.storage.set(pendingKey, payload);
+    window.dispatchEvent(new CustomEvent(ah.core.constants.events.pendingPayloadChanged, { detail: payload }));
+    return ok;
+  }
+
+  async function isWaveOpen() {
+    if (typeof ah.sites.wave?.heartbeat?.requestRecent === "function") {
+      return ah.sites.wave.heartbeat.requestRecent();
+    }
+    return !!ah.sites.wave?.heartbeat?.isRecent?.();
+  }
+
+  function openWaveTransactions() {
+    if (typeof GM_openInTab !== "function") return false;
+    GM_openInTab(ah.core.constants.waveTransactionsUrl, { active: true, insert: true });
+    return true;
+  }
+
+  async function stageOrder(orderCardEl) {
+    const order = await ah.sites.amazon.extractOrder.extractOrder(orderCardEl);
+    if (!order.orderId) {
+      ah.ui.toast.show("Could not find the Amazon order ID on this order card.", { tone: "warn" });
+      return null;
+    }
+    if (!order.amount?.value) {
+      ah.ui.toast.show("Could not find the Amazon order total on this order card.", { tone: "warn" });
+      return null;
+    }
+    const payload = ah.features.amazonToWave.payload.createAmazonToWavePayload(order);
+    if (!savePendingPayload(payload)) {
+      ah.ui.toast.show("Could not stage this Amazon order for Wave.", { tone: "error" });
+      return null;
+    }
+    if (await isWaveOpen()) {
+      ah.ui.toast.show(`Amazon order ${payload.orderId} staged. Open the matching imported Wave transaction, then apply details.`);
+    } else {
+      ah.ui.toast.show("Amazon order staged. Opening Wave transactions...");
+      openWaveTransactions();
+    }
+    return payload;
+  }
+
+  function stageFakeAmazonOrder() {
+    const payload = ah.features.amazonToWave.payload.fakePayload();
+    const ok = savePendingPayload(payload);
+    ah.ui.toast.show(ok ? "Staged fake Amazon order for Wave testing." : "Could not stage fake Amazon order.", { tone: ok ? "success" : "error" });
+    return ok ? payload : null;
+  }
+
+  ah.features.amazonToWave.stageFromAmazon = {
+    pendingPayload,
+    clearPendingPayload,
+    savePendingPayload,
+    stageOrder,
+    stageFakeAmazonOrder
+  };
+})();
+
+
+/* src/features/amazonToWave/applyIntoWave.js */
+(function () {
+  const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  ah.features = ah.features || {};
+  ah.features.amazonToWave = ah.features.amazonToWave || {};
+
+  const pendingKey = ah.core.constants.storageKeys.aliPendingPayload;
+  const modalActionsClass = "ah-amazon-to-wave-modal-actions";
+  const bannerId = "ah-amazon-to-wave-banner";
+
+  function pendingPayload() {
+    const payload = ah.core.storage.get(pendingKey, null);
+    return ah.features.amazonToWave.payload.isValidPayload(payload) ? payload : null;
+  }
+
+  function clearPendingPayload() {
+    ah.core.storage.remove(pendingKey);
+    ah.ui.floatingPanel.remove(bannerId);
+    window.dispatchEvent(new CustomEvent(ah.core.constants.events.pendingPayloadChanged));
+  }
+
+  function primaryTitle(payload) {
+    return payload?.description?.productTitle || payload?.products?.[0]?.title || "";
+  }
+
+  function normalize(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function formatDescription(existing, payload) {
+    const base = normalize(existing) || payload.description?.originalMerchant || "Amazon";
+    const title = normalize(primaryTitle(payload));
+    if (!title) return base;
+    const lowerBase = base.toLowerCase();
+    if (lowerBase.includes(title.toLowerCase()) || lowerBase.includes(String(payload.orderId || "").toLowerCase())) return base;
+    const productPrefix = payload.products?.length > 1 ? `${payload.products.length} items | ${title}` : title;
+    return `${base} | ${productPrefix}`;
+  }
+
+  function amountWarning(payload) {
+    const raw = ah.sites.wave.transactionModal.readField(["amount", "total"]);
+    const waveAmount = ah.core.money.parseMoney(raw);
+    const amazonAmount = Number(payload?.amount?.value);
+    if (!Number.isFinite(waveAmount) || !Number.isFinite(amazonAmount)) return "";
+    const delta = Math.abs(ah.core.money.roundCents(waveAmount) - ah.core.money.roundCents(amazonAmount));
+    if (delta < 0.01) return "";
+    const amazonFormatted = ah.core.money.formatCurrency(amazonAmount, payload.amount.currency);
+    const waveFormatted = ah.core.money.formatCurrency(waveAmount, payload.amount.currency);
+    return `Amazon staged amount is ${amazonFormatted} but Wave modal shows ${waveFormatted}. Review before saving.`;
+  }
+
+  function recordLastApplyResult(result) {
+    const next = Object.assign({ recordedAt: new Date().toISOString() }, result || {});
+    ah.features.amazonToWave.lastApplyResult = next;
+    return next;
+  }
+
+  async function applyIntoOpenTransaction(payload) {
+    const modal = ah.sites.wave.transactionModal.findOpenModal();
+    if (!modal) {
+      const result = recordLastApplyResult({
+        ok: false,
+        complete: false,
+        orderId: payload?.orderId || "",
+        filled: [],
+        warnings: [],
+        modalStillOpen: false,
+        saved: false,
+        message: "Open the matching imported Amazon transaction in Wave, then click Apply Amazon details."
+      });
+      ah.ui.toast.show(result.message, { tone: "warn" });
+      return result;
+    }
+
+    const descriptionField = ah.sites.wave.transactionModal.findField(["description", "notes"]);
+    if (!descriptionField) {
+      const result = recordLastApplyResult({
+        ok: false,
+        complete: false,
+        orderId: payload.orderId,
+        filled: [],
+        warnings: [],
+        modalStillOpen: !!ah.sites.wave.transactionModal.findOpenModal(),
+        saved: false,
+        message: "Could not find the Wave description field."
+      });
+      ah.ui.toast.show(result.message, { tone: "warn" });
+      return result;
+    }
+
+    const existing = descriptionField.value || "";
+    const nextDescription = formatDescription(existing, payload);
+    const changed = nextDescription !== existing;
+    const ok = changed ? ah.core.react.setFieldValue(descriptionField, nextDescription) : true;
+    const warning = amountWarning(payload);
+    const result = recordLastApplyResult({
+      ok,
+      complete: ok,
+      orderId: payload.orderId,
+      filled: changed ? ["description"] : [],
+      skipped: changed ? [] : ["description already contains Amazon details"],
+      warnings: warning ? [warning] : [],
+      modalStillOpen: !!ah.sites.wave.transactionModal.findOpenModal(),
+      saved: false,
+      message: warning || (changed ? `Applied Amazon details for ${payload.orderId}. Review and save manually.` : "Amazon details were already present. Review and save manually.")
+    });
+    ah.ui.toast.show(result.message, { tone: warning ? "warn" : "success" });
+    return result;
+  }
+
+  function removeModalActions() {
+    document.querySelectorAll(`.${modalActionsClass}`).forEach((node) => node.remove());
+  }
+
+  function isSamePayload(container, payload) {
+    return container?.dataset?.ahOrderId === String(payload.orderId) &&
+      container?.dataset?.ahAmount === String(payload.amount.value) &&
+      container?.dataset?.ahCurrency === String(payload.amount.currency);
+  }
+
+  function renderPayloadSummary(payload) {
+    const amount = ah.core.money.formatCurrency(payload.amount.value, payload.amount.currency);
+    const title = primaryTitle(payload);
+    return [
+      ah.core.dom.el("strong", {}, `Pending Amazon order: ${payload.orderId}`),
+      ah.core.dom.el("span", {}, amount),
+      ah.core.dom.el("span", { class: "ah-help" }, title ? `Product: ${title}` : "Open the matching imported transaction.")
+    ];
+  }
+
+  function renderModalActions(payload) {
+    return ah.core.dom.el("div", {
+      class: modalActionsClass,
+      "data-ah-order-id": payload.orderId,
+      "data-ah-amount": payload.amount.value,
+      "data-ah-currency": payload.amount.currency
+    }, [
+      ...renderPayloadSummary(payload),
+      ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button",
+        title: "Append the staged Amazon product details to this Wave transaction description without saving.",
+        onclick: () => applyIntoOpenTransaction(payload)
+      }, "Apply Amazon details"),
+      ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button ah-button-secondary",
+        title: "Remove this staged Amazon order.",
+        onclick: clearPendingPayload
+      }, "Clear")
+    ]);
+  }
+
+  function ensureModalActions(payload) {
+    const modal = ah.sites.wave.transactionModal.findOpenModal();
+    if (!modal) {
+      removeModalActions();
+      return;
+    }
+    document.querySelectorAll(`.${modalActionsClass}`).forEach((node) => {
+      if (!modal.contains(node)) node.remove();
+    });
+    let actions = modal.querySelector(`.${modalActionsClass}`);
+    if (!actions) {
+      modal.prepend(renderModalActions(payload));
+      return;
+    }
+    if (!isSamePayload(actions, payload)) actions.replaceWith(renderModalActions(payload));
+  }
+
+  function renderBanner(payload) {
+    return ah.core.dom.el("div", {}, [
+      ...renderPayloadSummary(payload),
+      ah.core.dom.el("div", { class: "ah-help", style: "margin-top:6px;" }, "Open the matching imported Amazon transaction in Wave, then click Apply Amazon details."),
+      ah.core.dom.el("div", { class: "ah-pill-row" }, [
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button ah-button-secondary",
+          title: "Remove this staged Amazon order.",
+          onclick: clearPendingPayload
+        }, "Clear")
+      ])
+    ]);
+  }
+
+  function ensureBanner(payload) {
+    const panel = document.getElementById(bannerId);
+    if (isSamePayload(panel, payload)) return;
+    ah.ui.floatingPanel.ensure(bannerId, (node) => {
+      node.dataset.ahOrderId = String(payload.orderId);
+      node.dataset.ahAmount = String(payload.amount.value);
+      node.dataset.ahCurrency = String(payload.amount.currency);
+      return renderBanner(payload);
+    });
+  }
+
+  function ensureWaveApplyUI() {
+    if (!ah.sites.wave.detect.isWave()) return;
+    const payload = pendingPayload();
+    if (!payload || document.getElementById("ah-settings-modal")) {
+      ah.ui.floatingPanel.remove(bannerId);
+      removeModalActions();
+      return;
+    }
+    if (ah.sites.wave.transactionModal.findOpenModal()) {
+      ah.ui.floatingPanel.remove(bannerId);
+      ensureModalActions(payload);
+    } else {
+      removeModalActions();
+      ensureBanner(payload);
+    }
+  }
+
+  ah.features.amazonToWave.applyIntoWave = {
+    pendingPayload,
+    clearPendingPayload,
+    applyIntoOpenTransaction,
+    ensureWaveApplyUI
+  };
+  ah.features.amazonToWave.ensureWaveApplyUI = ensureWaveApplyUI;
+  ah.features.amazonToWave.getLastApplyResult = () => ah.features.amazonToWave.lastApplyResult || null;
+})();
+
+
+/* src/features/amazonOrders/index.js */
+(function () {
+  const ah = window.AccountingHelpers = window.AccountingHelpers || {};
+  ah.features = ah.features || {};
+  ah.features.amazonOrders = ah.features.amazonOrders || {};
+
+  function setButtonTempText(button, text, ms) {
+    const old = button.textContent;
+    button.textContent = text;
+    button.disabled = true;
+    setTimeout(() => {
+      button.textContent = old;
+      button.disabled = false;
+    }, ms || 900);
+  }
+
+  async function copyTitle(orderCardEl, button) {
+    const order = await ah.sites.amazon.extractOrder.extractOrder(orderCardEl, { includeInvoice: false });
+    const text = ah.sites.amazon.extractOrder.copyTitleTextForOrder(order);
+    if (!text) {
+      setButtonTempText(button, "No title", 900);
+      return;
+    }
+    const ok = await ah.core.clipboard.writeText(text);
+    setButtonTempText(button, ok ? "Copied" : "Copy failed", 900);
+    ah.ui.toast.show(ok ? "Amazon product title copied." : "Could not copy Amazon product title.", { tone: ok ? "success" : "warn" });
+  }
+
+  async function openInvoices(orderCardEl, button) {
+    const oldText = button.textContent;
+    button.disabled = true;
+    button.textContent = "Opening...";
+    try {
+      const info = await ah.sites.amazon.invoices.fetchInvoiceInfo(orderCardEl);
+      const urls = info?.invoiceUrls || [];
+      if (!urls.length) {
+        button.textContent = "No invoices";
+        await new Promise((resolve) => setTimeout(resolve, 900));
+        return;
+      }
+      urls.forEach((url) => ah.sites.amazon.invoices.openTab(url, false));
+      button.textContent = urls.length === 1 ? "Opened" : `Opened ${urls.length}`;
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    } finally {
+      button.textContent = oldText;
+      button.disabled = false;
+    }
+  }
+
+  async function openAndDownloadInvoice(orderCardEl, button) {
+    const oldText = button.textContent;
+    button.disabled = true;
+    button.textContent = "Opening...";
+    try {
+      const info = await ah.sites.amazon.invoices.fetchInvoiceInfo(orderCardEl);
+      const urls = info?.invoiceUrls || [];
+      if (urls.length !== 1) {
+        button.textContent = urls.length ? "Not single" : "No invoices";
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return;
+      }
+      ah.sites.amazon.invoices.openTab(urls[0], true);
+      ah.sites.amazon.invoices.downloadInvoice(urls[0], info?.orderId || ah.sites.amazon.extractOrder.extractOrderId(orderCardEl));
+      button.textContent = "Done";
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    } finally {
+      button.textContent = oldText;
+      button.disabled = false;
+    }
+  }
+
+  function button(label, className, title, onClick) {
+    return ah.core.dom.el("button", {
+      type: "button",
+      class: `ah-button ${className || ""}`.trim(),
+      title,
+      onclick: (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick(event.currentTarget);
+      }
+    }, label);
+  }
+
+  function ensureOrderCard(orderCardEl) {
+    if (!orderCardEl || orderCardEl.querySelector("[data-ah-amazon-helper='true']")) return;
+    const header = ah.sites.amazon.invoices.getOrderHeaderEl(orderCardEl);
+    const row = ah.core.dom.el("div", {
+      class: "ah-amz-order-row",
+      "data-ah-amazon-helper": "true"
+    });
+    const copyButton = button("Copy title", "ah-amz-copy-title ah-button-secondary", "Copy the primary Amazon product title, including quantity when available.", (btn) => copyTitle(orderCardEl, btn));
+    const stageButton = button("Stage for Wave", "ah-amz-stage-wave", "Stage this Amazon order so it can enrich an existing imported Wave transaction.", (btn) => {
+      const old = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Staging...";
+      ah.features.amazonToWave.stageFromAmazon.stageOrder(orderCardEl).finally(() => {
+        btn.textContent = old;
+        btn.disabled = false;
+      });
+    });
+    const openButton = button("Open invoice", "ah-amz-open-invoice ah-button-secondary", "Open invoice PDF(s) for this order in new tabs.", (btn) => openInvoices(orderCardEl, btn));
+    const downloadButton = button("Open & download invoice", "ah-amz-download-invoice ah-button-secondary", "Open the single invoice in a focused tab and attempt to download it.", (btn) => openAndDownloadInvoice(orderCardEl, btn));
+    row.append(copyButton, stageButton, openButton, downloadButton);
+
+    const insertAfter = header && orderCardEl.contains(header) ? header : null;
+    if (insertAfter?.parentElement) {
+      insertAfter.insertAdjacentElement("afterend", row);
+    } else {
+      orderCardEl.prepend(row);
+    }
+
+    ah.sites.amazon.invoices.fetchInvoiceInfo(orderCardEl).then((info) => {
+      if (!row.isConnected) return;
+      const count = info?.invoiceUrls?.length || 0;
+      openButton.textContent = count === 1 ? "Open invoice" : "Open all invoices";
+      downloadButton.hidden = count !== 1;
+      row.dataset.ahInvoiceCount = String(count);
+    });
+  }
+
+  function ensure() {
+    if (!ah.sites.amazon.detect.isOrdersPage()) return;
+    ah.ui.styles.ensureStyles();
+    ah.sites.amazon.extractOrder.findOrderCards(document).forEach(ensureOrderCard);
+  }
+
+  function diagnostics() {
+    const cards = ah.sites.amazon.extractOrder.findOrderCards(document);
+    const firstCard = cards[0] || null;
+    const firstOrder = firstCard ? {
+      orderIdFound: !!ah.sites.amazon.extractOrder.extractOrderId(firstCard),
+      orderDateFound: !!ah.sites.amazon.extractOrder.extractOrderDate(firstCard),
+      amountFound: !!ah.sites.amazon.extractOrder.extractAmount(firstCard).value,
+      productsFound: ah.sites.amazon.extractOrder.extractProducts(firstCard).length,
+      invoicePopoverFound: !!ah.sites.amazon.invoices.getPopoverElForCard(firstCard),
+      invoiceUrlsFound: Number(firstCard.querySelector(".ah-amz-order-row")?.dataset?.ahInvoiceCount || 0)
+    } : null;
+    return {
+      isAmazon: !!ah.sites.amazon.detect.isAmazon(),
+      isOrdersPage: !!ah.sites.amazon.detect.isOrdersPage(),
+      orderCardsFound: cards.length,
+      enhancedCards: cards.filter((card) => !!card.querySelector("[data-ah-amazon-helper='true']")).length,
+      firstOrder,
+      buttons: {
+        copyTitleInjected: !!document.querySelector(".ah-amz-copy-title"),
+        stageForWaveInjected: !!document.querySelector(".ah-amz-stage-wave"),
+        invoiceButtonsInjected: !!document.querySelector(".ah-amz-open-invoice")
+      },
+      errors: [],
+      warnings: []
+    };
+  }
+
+  ah.features.amazonOrders = { ensure, diagnostics };
+})();
+
+
 /* src/features/diagnostics/index.js */
 (function () {
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
@@ -4072,6 +5108,7 @@
   const panelId = "ah-diagnostics-panel";
   const modalId = "ah-diagnostics-modal";
   let lastDiagnostics = null;
+  let launcherListenerInstalled = false;
 
   function gmFunction(name) {
     const apis = {
@@ -4081,7 +5118,9 @@
       GM_listValues: typeof GM_listValues === "function" ? GM_listValues : globalThis.GM_listValues,
       GM_addValueChangeListener: typeof GM_addValueChangeListener === "function" ?
         GM_addValueChangeListener :
-        globalThis.GM_addValueChangeListener
+        globalThis.GM_addValueChangeListener,
+      GM_openInTab: typeof GM_openInTab === "function" ? GM_openInTab : globalThis.GM_openInTab,
+      GM_download: typeof GM_download === "function" ? GM_download : globalThis.GM_download
     };
     return typeof apis[name] === "function" ? apis[name] : null;
   }
@@ -4092,7 +5131,9 @@
       set: !!gmFunction("GM_setValue"),
       delete: !!gmFunction("GM_deleteValue"),
       list: !!gmFunction("GM_listValues"),
-      changeListener: !!gmFunction("GM_addValueChangeListener")
+      changeListener: !!gmFunction("GM_addValueChangeListener"),
+      openInTab: !!gmFunction("GM_openInTab"),
+      download: !!gmFunction("GM_download")
     };
   }
 
@@ -4199,12 +5240,16 @@
     const stored = payload === undefined ?
       ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null) :
       payload;
-    const valid = ah.features.aliToWave.payload?.isValidPayload?.(stored) || false;
+    const validAli = ah.features.aliToWave.payload?.isValidPayload?.(stored) || false;
+    const validAmazon = ah.features.amazonToWave.payload?.isValidPayload?.(stored) || false;
+    const valid = validAli || validAmazon;
     const errors = [];
     if (stored && !valid) {
-      if (stored.version !== ah.features.aliToWave.payload?.ALI_TO_WAVE_PAYLOAD_VERSION) errors.push("version mismatch");
-      if (stored.source !== "aliexpress") errors.push("source is not aliexpress");
+      if (stored.source === "amazon" && stored.version !== ah.features.amazonToWave.payload?.AMAZON_TO_WAVE_PAYLOAD_VERSION) errors.push("version mismatch");
+      else if (stored.source !== "amazon" && stored.version !== ah.features.aliToWave.payload?.ALI_TO_WAVE_PAYLOAD_VERSION) errors.push("version mismatch");
+      if (!["aliexpress", "amazon"].includes(stored.source)) errors.push("source is not supported");
       if (stored.target !== "wave") errors.push("target is not wave");
+      if (stored.source === "amazon" && stored.mode !== "edit-existing-transaction") errors.push("amazon mode is not edit-existing-transaction");
       if (!stored.orderId) errors.push("missing orderId");
       if (!Number.isFinite(Number(stored.amount?.value))) errors.push("invalid amount");
     }
@@ -4213,6 +5258,7 @@
       valid,
       source: stored?.source || "",
       target: stored?.target || "",
+      mode: stored?.mode || "",
       orderId: stored?.orderId || "",
       amount: stored?.amount?.value || "",
       currency: stored?.amount?.currency || "",
@@ -4227,7 +5273,9 @@
       isWave: !!ah.sites.wave?.detect?.isWave?.(),
       isAliExpress: !!ah.sites.aliexpress?.detect?.isAliExpress?.(),
       isAliExpressOrderPage: !!ah.sites.aliexpress?.detect?.isOrderPage?.(),
-      isAliExpressCartPage: !!ah.sites.aliexpress?.detect?.isCartPage?.()
+      isAliExpressCartPage: !!ah.sites.aliexpress?.detect?.isCartPage?.(),
+      isAmazon: !!ah.sites.amazon?.detect?.isAmazon?.(),
+      isAmazonOrdersPage: !!ah.sites.amazon?.detect?.isOrdersPage?.()
     };
   }
 
@@ -4360,9 +5408,44 @@
     const pending = pendingPayloadDiagnostics(raw);
     return {
       pendingPayload: pending,
-      preflight: raw ? preflightWaveImport(raw) : null,
+      preflight: raw && raw.source === "aliexpress" ? preflightWaveImport(raw) : null,
       importedOrderCount: Object.keys(ah.features.aliToWave.duplicateGuard?.all?.() || {}).length,
       lastFillResult: ah.features.aliToWave.lastFillResult || null
+    };
+  }
+
+  function preflightAmazonApply(payload) {
+    const pending = payload || ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null);
+    const payloadValid = !!ah.features.amazonToWave.payload?.isValidPayload?.(pending);
+    const fields = waveFieldState();
+    const modalOpen = !!ah.sites.wave?.transactionModal?.findOpenModal?.();
+    const warnings = [];
+    const errors = [];
+    const missing = [];
+    if (!pending) errors.push("no pending payload");
+    else if (!payloadValid) errors.push("pending payload is invalid");
+    if (!ah.sites.wave?.detect?.isWave?.()) warnings.push("current page is not Wave");
+    if (modalOpen && !fields.description) missing.push("description");
+    if (modalOpen && !fields.amount) warnings.push("amount field not detected; amount match warning unavailable");
+    if (!modalOpen) warnings.push("open the matching imported Amazon transaction modal before applying");
+    const canFillCurrentModal = modalOpen && fields.description && payloadValid;
+    return {
+      ok: canFillCurrentModal && errors.length === 0,
+      canFillCurrentModal,
+      canCreateWithdrawal: false,
+      missing,
+      warnings,
+      errors,
+      fields
+    };
+  }
+
+  async function amazonToWaveDiagnostics() {
+    const raw = ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null);
+    return {
+      pendingPayload: pendingPayloadDiagnostics(raw),
+      preflight: raw && raw.source === "amazon" ? preflightAmazonApply(raw) : null,
+      lastApplyResult: ah.features.amazonToWave.lastApplyResult || null
     };
   }
 
@@ -4371,6 +5454,23 @@
       isAliExpress: !!ah.sites.aliexpress?.detect?.isAliExpress?.(),
       isOrderPage: !!ah.sites.aliexpress?.detect?.isOrderPage?.(),
       isCartPage: !!ah.sites.aliexpress?.detect?.isCartPage?.()
+    };
+  }
+
+  function amazonDiagnostics() {
+    return ah.features.amazonOrders?.diagnostics?.() || {
+      isAmazon: !!ah.sites.amazon?.detect?.isAmazon?.(),
+      isOrdersPage: !!ah.sites.amazon?.detect?.isOrdersPage?.(),
+      orderCardsFound: 0,
+      enhancedCards: 0,
+      firstOrder: null,
+      buttons: {
+        copyTitleInjected: false,
+        stageForWaveInjected: false,
+        invoiceButtonsInjected: false
+      },
+      errors: [],
+      warnings: []
     };
   }
 
@@ -4387,9 +5487,11 @@
       pendingPayload: pendingPayloadDiagnostics(),
       wave: await waveDiagnostics(),
       aliexpress: aliExpressDiagnostics(),
+      amazon: amazonDiagnostics(),
       aliToWave: await aliToWaveDiagnostics(),
+      amazonToWave: await amazonToWaveDiagnostics(),
       recentLogs: ah.core.logger?.getLogs?.().slice(-50) || [],
-      lastFillResult: ah.features.aliToWave.lastFillResult || null
+      lastFillResult: ah.features.aliToWave.lastFillResult || ah.features.amazonToWave.lastApplyResult || null
     };
     lastDiagnostics = report;
     return report;
@@ -4453,6 +5555,10 @@
     return ok ? payload : null;
   }
 
+  function stageFakeAmazonOrder() {
+    return ah.features.amazonToWave.stageFromAmazon.stageFakeAmazonOrder();
+  }
+
   function clearPendingPayload() {
     ah.features.aliToWave.stageFromAliExpress?.clearPendingPayload?.();
   }
@@ -4467,11 +5573,11 @@
   function summaryFor(report) {
     const pending = report.pendingPayload;
     const wave = report.wave;
-    const preflight = report.aliToWave?.preflight;
+    const preflight = pending.source === "amazon" ? report.amazonToWave?.preflight : report.aliToWave?.preflight;
     const lines = [
       `Script: ${report.script.name || "(unknown)"} ${report.script.version || ""} (${report.script.mode})`,
       `Storage: ${report.storage.backend}; settings ${report.settings.exists ? "exist" : "missing"}; backup ${report.storage.keys.backupExists ? "exists" : "missing"}; audit ${report.storage.keys.auditLogExists ? "exists" : "missing"}`,
-      `Pending payload: ${pending.exists ? "yes" : "no"}${pending.exists ? `; valid ${pending.valid ? "yes" : "no"}; ${pending.currency} ${pending.amount}; order ${pending.orderId}` : ""}`,
+      `Pending payload: ${pending.exists ? "yes" : "no"}${pending.exists ? `; source ${pending.source}; valid ${pending.valid ? "yes" : "no"}; ${pending.currency} ${pending.amount}; order ${pending.orderId}` : ""}`,
       `Wave: heartbeat ${wave.heartbeatRecent ? "recent" : "not recent"}; modal ${wave.modalOpen ? "open" : "not open"}; dropdowns ${wave.dropdowns.openCount}`,
       `Ready to fill: ${preflight ? (preflight.ok ? "yes" : "no") : "no pending payload"}`
     ];
@@ -4548,6 +5654,14 @@
             type: "button",
             class: "ah-button ah-button-secondary",
             onclick: async () => {
+              stageFakeAmazonOrder();
+              await runAndRender();
+            }
+          }, "Stage fake Amazon order"),
+          ah.core.dom.el("button", {
+            type: "button",
+            class: "ah-button ah-button-secondary",
+            onclick: async () => {
               clearPendingPayload();
               await runAndRender();
             }
@@ -4573,18 +5687,42 @@
     document.body.append(backdrop);
   }
 
-  function ensure() {
-    if (!ah.sites.wave?.detect?.isWave?.() && !ah.sites.aliexpress?.detect?.isAliExpress?.()) return;
-    if (document.getElementById(panelId)) return;
-    const panel = ah.core.dom.el("div", { id: panelId }, [
-      ah.core.dom.el("button", {
+  function launcherButton() {
+    const button = ah.core.dom.el("button", {
         type: "button",
         class: "ah-button",
+        "data-ah-diagnostics-launcher": "true",
         title: "Open Accounting Helpers diagnostics and test controls.",
         onclick: openModal
-      }, "Diagnostics/Test")
-    ]);
-    document.body.append(panel);
+      }, "Diagnostics/Test");
+    button.onclick = openModal;
+    return button;
+  }
+
+  function installLauncherListener() {
+    if (launcherListenerInstalled) return;
+    launcherListenerInstalled = true;
+    document.addEventListener("click", (event) => {
+      const target = event.target?.closest?.("[data-ah-diagnostics-launcher='true']");
+      if (!target) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openModal();
+    }, true);
+  }
+
+  function ensure() {
+    if (!ah.sites.wave?.detect?.isWave?.() && !ah.sites.aliexpress?.detect?.isAliExpress?.() && !ah.sites.amazon?.detect?.isAmazon?.()) return;
+    installLauncherListener();
+    let panel = document.getElementById(panelId);
+    if (!panel) {
+      panel = ah.core.dom.el("div", { id: panelId });
+      document.body.append(panel);
+    }
+    const existingButton = panel.querySelector("[data-ah-diagnostics-launcher='true']");
+    if (!existingButton || existingButton.textContent.trim() !== "Diagnostics/Test") {
+      panel.replaceChildren(launcherButton());
+    }
   }
 
   ah.features.aliToWave.preflightWaveImport = preflightWaveImport;
@@ -4595,12 +5733,15 @@
     runStorageDiagnostics: storageDiagnostics,
     runWaveDiagnostics: waveDiagnostics,
     runAliToWaveDiagnostics: aliToWaveDiagnostics,
+    runAmazonDiagnostics: amazonDiagnostics,
+    runAmazonToWaveDiagnostics: amazonToWaveDiagnostics,
     exportDebugReport,
     copyDebugReport,
     getLastDiagnostics() {
       return lastDiagnostics;
     },
-    stageFakeAliExpressOrder
+    stageFakeAliExpressOrder,
+    stageFakeAmazonOrder
   };
 })();
 
@@ -4643,6 +5784,9 @@
       getPendingAliToWavePayload() {
         return ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null);
       },
+      getPendingWavePayload() {
+        return ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null);
+      },
       clearPendingAliToWavePayload() {
         ah.core.storage.remove(ah.core.constants.storageKeys.aliPendingPayload);
         window.dispatchEvent(new CustomEvent(ah.core.constants.events.pendingPayloadChanged));
@@ -4668,6 +5812,9 @@
       runAliToWaveDiagnostics() {
         return ah.features.diagnostics.runAliToWaveDiagnostics();
       },
+      runAmazonDiagnostics() {
+        return ah.features.diagnostics.runAmazonDiagnostics();
+      },
       exportDebugReport() {
         return ah.features.diagnostics.exportDebugReport();
       },
@@ -4678,7 +5825,7 @@
         return ah.features.diagnostics.getLastDiagnostics();
       },
       getLastFillResult() {
-        return ah.features.aliToWave.getLastFillResult?.() || ah.features.aliToWave.lastFillResult || null;
+        return ah.features.aliToWave.getLastFillResult?.() || ah.features.amazonToWave.getLastApplyResult?.() || ah.features.aliToWave.lastFillResult || null;
       }
     });
   }
@@ -4698,12 +5845,17 @@
       ah.features.waveAccountSwitcher.ensure();
       ah.features.waveReviewedSave.ensure();
       ah.features.aliToWave.ensureWaveImportUI();
+      ah.features.amazonToWave.ensureWaveApplyUI();
     }
 
     if (ah.sites.aliexpress.detect.isAliExpress()) {
       ah.features.aliexpressCadCopy.ensure();
       ah.features.aliexpressCartPerUnit.ensure();
       ah.features.aliToWave.ensureAliExpressSendButton();
+    }
+
+    if (ah.sites.amazon.detect.isOrdersPage()) {
+      ah.features.amazonOrders.ensure();
     }
 
     document.documentElement.dataset.accountingHelpersReadyVersion = ah.core.constants.version;

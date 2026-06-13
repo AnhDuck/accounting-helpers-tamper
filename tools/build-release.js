@@ -2,8 +2,8 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const version = "0.1.22";
-const devBootstrapVersion = "0.1.16-dev";
+const version = "0.1.23";
+const devBootstrapVersion = "0.1.17-dev";
 const devOrigin = process.env.ACCOUNTING_HELPERS_DEV_ORIGIN || "http://127.0.0.1:5173";
 
 const sourceFiles = [
@@ -12,6 +12,7 @@ const sourceFiles = [
   "src/core/storage.js",
   "src/core/settings.js",
   "src/core/dom.js",
+  "src/core/clipboard.js",
   "src/core/react.js",
   "src/core/money.js",
   "src/core/dates.js",
@@ -30,6 +31,10 @@ const sourceFiles = [
   "src/sites/aliexpress/detect.js",
   "src/sites/aliexpress/selectors.js",
   "src/sites/aliexpress/extractOrder.js",
+  "src/sites/amazon/detect.js",
+  "src/sites/amazon/selectors.js",
+  "src/sites/amazon/invoices.js",
+  "src/sites/amazon/extractOrder.js",
   "src/features/waveSavingsDashboard/index.js",
   "src/features/waveTaxButtons/index.js",
   "src/features/waveAccountSwitcher/index.js",
@@ -40,6 +45,10 @@ const sourceFiles = [
   "src/features/aliToWave/duplicateGuard.js",
   "src/features/aliToWave/stageFromAliExpress.js",
   "src/features/aliToWave/importIntoWave.js",
+  "src/features/amazonToWave/payload.js",
+  "src/features/amazonToWave/stageFromAmazon.js",
+  "src/features/amazonToWave/applyIntoWave.js",
+  "src/features/amazonOrders/index.js",
   "src/features/diagnostics/index.js",
   "src/init.js"
 ];
@@ -69,6 +78,12 @@ function userscriptHeader({ name, scriptVersion, description, updateUrls = false
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
 // @match        https://www.aliexpress.com/p/shoppingcart/index.html*
+// @match        https://www.amazon.ca/*your-orders*
+// @match        https://www.amazon.ca/*order-history*
+// @match        https://www.amazon.com/*your-orders*
+// @match        https://www.amazon.com/*order-history*
+// @match        https://www.amazon.co.uk/*your-orders*
+// @match        https://www.amazon.co.uk/*order-history*
 ${updateUrlLines}${devUpdateUrlLines}// @run-at       document-idle
 // @grant        GM_addStyle
 // @grant        GM_setClipboard
@@ -78,6 +93,7 @@ ${updateUrlLines}${devUpdateUrlLines}// @run-at       document-idle
 // @grant        GM_listValues
 // @grant        GM_addValueChangeListener
 // @grant        GM_openInTab
+// @grant        GM_download
 // @grant        GM_registerMenuCommand
 // @grant        GM_xmlhttpRequest
 // @connect      open.er-api.com
@@ -114,6 +130,7 @@ function devLoaderScript() {
     "GM_listValues",
     "GM_addValueChangeListener",
     "GM_openInTab",
+    "GM_download",
     "GM_registerMenuCommand",
     "GM_xmlhttpRequest"
   ];
@@ -127,6 +144,7 @@ function devLoaderScript() {
     GM_listValues: typeof GM_listValues === "function" ? GM_listValues : null,
     GM_addValueChangeListener: typeof GM_addValueChangeListener === "function" ? GM_addValueChangeListener : null,
     GM_openInTab: typeof GM_openInTab === "function" ? GM_openInTab : null,
+    GM_download: typeof GM_download === "function" ? GM_download : null,
     GM_registerMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
     GM_xmlhttpRequest: typeof GM_xmlhttpRequest === "function" ? GM_xmlhttpRequest : null
   };

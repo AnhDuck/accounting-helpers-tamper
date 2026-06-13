@@ -3,7 +3,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.22",
+    version: "0.1.23",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",

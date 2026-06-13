@@ -380,11 +380,44 @@
       }
       .ah-ae-row { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
       .ah-ae-total { color: #184f61; font-weight: 700; }
+      .ah-amz-order-row {
+        align-items: center;
+        background: #f6fafb;
+        border: 1px solid #cbd9de;
+        border-radius: 6px;
+        box-sizing: border-box;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0;
+        padding: 10px;
+        width: 100%;
+      }
+      .ah-amz-order-row .ah-button { min-height: 30px; }
+      .ah-amazon-to-wave-modal-actions {
+        align-items: center;
+        background: #f6fafb;
+        border: 1px solid #b9c7cc;
+        border-radius: 6px;
+        color: #182f36;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 12px;
+        padding: 10px;
+      }
+      .ah-amazon-to-wave-modal-actions strong { font-size: 13px; margin-right: 4px; }
+      .ah-amazon-to-wave-modal-actions span { color: #3d5961; font-weight: 600; }
+      .ah-amazon-to-wave-modal-actions .ah-help {
+        flex: 1 1 220px;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
       #ah-diagnostics-panel {
-        bottom: 62px;
+        bottom: var(--ah-dev-status-offset, 84px);
         left: 12px;
         position: fixed;
-        z-index: 2147483646;
+        z-index: 2147483647;
       }
       .ah-diagnostics-modal {
         display: grid;
