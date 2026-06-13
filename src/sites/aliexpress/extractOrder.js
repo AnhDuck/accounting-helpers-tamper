@@ -54,7 +54,7 @@
   function extractOrderDate(root) {
     const source = root || findOrderRoot();
     const bodyText = ah.core.dom.text(source);
-    const labelMatch = bodyText.match(/(?:order\s*(?:date|time)|placed\s*on)\s*[:#]?\s*([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}|\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})/i);
+    const labelMatch = bodyText.match(/(?:order\s*(?:date|time)|placed\s*on|date)\s*[:#]?\s*([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}|\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})/i);
     return ah.core.dates.parseLooseDate(labelMatch?.[1]) || ah.core.dates.toIsoDate(new Date());
   }
 

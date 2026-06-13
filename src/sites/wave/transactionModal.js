@@ -11,24 +11,25 @@
 
   function findField(labels) {
     const root = findOpenModal() || document;
-    const field = ah.core.dom.findFieldByLabel(root, labels);
-    if (field) return field;
-
     const labelList = (Array.isArray(labels) ? labels : [labels]).map((label) => String(label).toLowerCase());
     const fields = ah.core.dom.visible(ah.core.dom.qsa(ah.sites.wave.selectors.fields, root));
     if (labelList.some((label) => label === "date")) {
-      return fields.find((item) => item.tagName === "INPUT" && /^\d{4}-\d{2}-\d{2}$/.test(item.value || ""));
+      const field = fields.find((item) => item.tagName === "INPUT" && /^\d{4}-\d{2}-\d{2}$/.test(item.value || ""));
+      if (field) return field;
     }
     if (labelList.some((label) => ["description", "notes"].includes(label))) {
-      return fields.find((item) => /description/i.test(item.getAttribute("placeholder") || ""));
+      const field = fields.find((item) => /description/i.test(item.getAttribute("placeholder") || ""));
+      if (field) return field;
     }
     if (labelList.some((label) => ["amount", "total"].includes(label))) {
-      return fields.find((item) => /amount/i.test(item.getAttribute("aria-label") || ""));
+      const field = fields.find((item) => /amount/i.test(item.getAttribute("aria-label") || ""));
+      if (field) return field;
     }
     if (labelList.some((label) => label === "type")) {
-      return fields.find((item) => item.tagName === "SELECT" && /direction/i.test(item.getAttribute("name") || ""));
+      const field = fields.find((item) => item.tagName === "SELECT" && /direction/i.test(item.getAttribute("name") || ""));
+      if (field) return field;
     }
-    return null;
+    return ah.core.dom.findFieldByLabel(root, labels);
   }
 
   function readField(labels) {

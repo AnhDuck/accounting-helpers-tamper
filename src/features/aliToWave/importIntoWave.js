@@ -5,6 +5,7 @@
 
   const pendingKey = ah.core.constants.storageKeys.aliPendingPayload;
   const modalActionsClass = "ah-ali-to-wave-modal-actions";
+  const bannerId = "ah-ali-to-wave-banner";
   let autoFillInFlight = false;
 
   function pendingPayload() {
@@ -14,7 +15,7 @@
 
   function clearPendingPayload() {
     ah.core.storage.remove(pendingKey);
-    ah.ui.floatingPanel.remove("ah-ali-to-wave-banner");
+    ah.ui.floatingPanel.remove(bannerId);
     window.dispatchEvent(new CustomEvent(ah.core.constants.events.pendingPayloadChanged));
   }
 
@@ -58,7 +59,12 @@
 
   function renderModalActions(payload) {
     const amount = ah.core.money.formatCurrency(payload.amount.value, payload.amount.currency);
-    return ah.core.dom.el("div", { class: modalActionsClass }, [
+    return ah.core.dom.el("div", {
+      class: modalActionsClass,
+      "data-ah-order-id": payload.orderId,
+      "data-ah-amount": payload.amount.value,
+      "data-ah-currency": payload.amount.currency
+    }, [
       ah.core.dom.el("strong", {}, `AliExpress order ${payload.orderId}`),
       ah.core.dom.el("span", {}, amount),
       ah.core.dom.el("span", { class: "ah-help" }, "Latest staged order"),
@@ -77,6 +83,12 @@
     ]);
   }
 
+  function isSamePayload(container, payload) {
+    return container?.dataset?.ahOrderId === String(payload.orderId) &&
+      container?.dataset?.ahAmount === String(payload.amount.value) &&
+      container?.dataset?.ahCurrency === String(payload.amount.currency);
+  }
+
   function ensureModalActions(payload) {
     const modal = ah.sites.wave.transactionModal.findOpenModal();
     if (!modal) {
@@ -89,7 +101,19 @@
       modal.prepend(actions);
       return;
     }
+    if (isSamePayload(actions, payload)) return;
     actions.replaceWith(renderModalActions(payload));
+  }
+
+  function ensureBanner(payload) {
+    const panel = document.getElementById(bannerId);
+    if (isSamePayload(panel, payload)) return;
+    ah.ui.floatingPanel.ensure(bannerId, (node) => {
+      node.dataset.ahOrderId = String(payload.orderId);
+      node.dataset.ahAmount = String(payload.amount.value);
+      node.dataset.ahCurrency = String(payload.amount.currency);
+      return renderBanner(payload);
+    });
   }
 
   async function maybeAutoFill(payload) {
@@ -107,11 +131,11 @@
     if (!ah.sites.wave.detect.isWave()) return;
     const payload = pendingPayload();
     if (!payload) {
-      ah.ui.floatingPanel.remove("ah-ali-to-wave-banner");
+      ah.ui.floatingPanel.remove(bannerId);
       removeModalActions();
       return;
     }
-    ah.ui.floatingPanel.ensure("ah-ali-to-wave-banner", () => renderBanner(payload));
+    ensureBanner(payload);
     ensureModalActions(payload);
     maybeAutoFill(payload);
   }

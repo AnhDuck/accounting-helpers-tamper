@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.2
+// @version      0.1.3
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -29,7 +29,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.2",
+    version: "0.1.3",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -1198,24 +1198,25 @@
 
   function findField(labels) {
     const root = findOpenModal() || document;
-    const field = ah.core.dom.findFieldByLabel(root, labels);
-    if (field) return field;
-
     const labelList = (Array.isArray(labels) ? labels : [labels]).map((label) => String(label).toLowerCase());
     const fields = ah.core.dom.visible(ah.core.dom.qsa(ah.sites.wave.selectors.fields, root));
     if (labelList.some((label) => label === "date")) {
-      return fields.find((item) => item.tagName === "INPUT" && /^\d{4}-\d{2}-\d{2}$/.test(item.value || ""));
+      const field = fields.find((item) => item.tagName === "INPUT" && /^\d{4}-\d{2}-\d{2}$/.test(item.value || ""));
+      if (field) return field;
     }
     if (labelList.some((label) => ["description", "notes"].includes(label))) {
-      return fields.find((item) => /description/i.test(item.getAttribute("placeholder") || ""));
+      const field = fields.find((item) => /description/i.test(item.getAttribute("placeholder") || ""));
+      if (field) return field;
     }
     if (labelList.some((label) => ["amount", "total"].includes(label))) {
-      return fields.find((item) => /amount/i.test(item.getAttribute("aria-label") || ""));
+      const field = fields.find((item) => /amount/i.test(item.getAttribute("aria-label") || ""));
+      if (field) return field;
     }
     if (labelList.some((label) => label === "type")) {
-      return fields.find((item) => item.tagName === "SELECT" && /direction/i.test(item.getAttribute("name") || ""));
+      const field = fields.find((item) => item.tagName === "SELECT" && /direction/i.test(item.getAttribute("name") || ""));
+      if (field) return field;
     }
-    return null;
+    return ah.core.dom.findFieldByLabel(root, labels);
   }
 
   function readField(labels) {
@@ -1444,7 +1445,7 @@
   function extractOrderDate(root) {
     const source = root || findOrderRoot();
     const bodyText = ah.core.dom.text(source);
-    const labelMatch = bodyText.match(/(?:order\s*(?:date|time)|placed\s*on)\s*[:#]?\s*([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}|\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})/i);
+    const labelMatch = bodyText.match(/(?:order\s*(?:date|time)|placed\s*on|date)\s*[:#]?\s*([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}|\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})/i);
     return ah.core.dates.parseLooseDate(labelMatch?.[1]) || ah.core.dates.toIsoDate(new Date());
   }
 
@@ -2655,6 +2656,7 @@
 
   const pendingKey = ah.core.constants.storageKeys.aliPendingPayload;
   const modalActionsClass = "ah-ali-to-wave-modal-actions";
+  const bannerId = "ah-ali-to-wave-banner";
   let autoFillInFlight = false;
 
   function pendingPayload() {
@@ -2664,7 +2666,7 @@
 
   function clearPendingPayload() {
     ah.core.storage.remove(pendingKey);
-    ah.ui.floatingPanel.remove("ah-ali-to-wave-banner");
+    ah.ui.floatingPanel.remove(bannerId);
     window.dispatchEvent(new CustomEvent(ah.core.constants.events.pendingPayloadChanged));
   }
 
@@ -2708,7 +2710,12 @@
 
   function renderModalActions(payload) {
     const amount = ah.core.money.formatCurrency(payload.amount.value, payload.amount.currency);
-    return ah.core.dom.el("div", { class: modalActionsClass }, [
+    return ah.core.dom.el("div", {
+      class: modalActionsClass,
+      "data-ah-order-id": payload.orderId,
+      "data-ah-amount": payload.amount.value,
+      "data-ah-currency": payload.amount.currency
+    }, [
       ah.core.dom.el("strong", {}, `AliExpress order ${payload.orderId}`),
       ah.core.dom.el("span", {}, amount),
       ah.core.dom.el("span", { class: "ah-help" }, "Latest staged order"),
@@ -2727,6 +2734,12 @@
     ]);
   }
 
+  function isSamePayload(container, payload) {
+    return container?.dataset?.ahOrderId === String(payload.orderId) &&
+      container?.dataset?.ahAmount === String(payload.amount.value) &&
+      container?.dataset?.ahCurrency === String(payload.amount.currency);
+  }
+
   function ensureModalActions(payload) {
     const modal = ah.sites.wave.transactionModal.findOpenModal();
     if (!modal) {
@@ -2739,7 +2752,19 @@
       modal.prepend(actions);
       return;
     }
+    if (isSamePayload(actions, payload)) return;
     actions.replaceWith(renderModalActions(payload));
+  }
+
+  function ensureBanner(payload) {
+    const panel = document.getElementById(bannerId);
+    if (isSamePayload(panel, payload)) return;
+    ah.ui.floatingPanel.ensure(bannerId, (node) => {
+      node.dataset.ahOrderId = String(payload.orderId);
+      node.dataset.ahAmount = String(payload.amount.value);
+      node.dataset.ahCurrency = String(payload.amount.currency);
+      return renderBanner(payload);
+    });
   }
 
   async function maybeAutoFill(payload) {
@@ -2757,11 +2782,11 @@
     if (!ah.sites.wave.detect.isWave()) return;
     const payload = pendingPayload();
     if (!payload) {
-      ah.ui.floatingPanel.remove("ah-ali-to-wave-banner");
+      ah.ui.floatingPanel.remove(bannerId);
       removeModalActions();
       return;
     }
-    ah.ui.floatingPanel.ensure("ah-ali-to-wave-banner", () => renderBanner(payload));
+    ensureBanner(payload);
     ensureModalActions(payload);
     maybeAutoFill(payload);
   }
