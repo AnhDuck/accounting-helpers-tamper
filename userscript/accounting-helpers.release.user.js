@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.4
+// @version      0.1.5
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -29,7 +29,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.4",
+    version: "0.1.5",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -1109,15 +1109,15 @@
   const helperFields = [
     {
       path: "wave.accounts.amex",
-      label: "Switch account 1",
-      title: "First saved Wave account used by the account switch helper.",
-      help: "First account used by the floating Wave account switcher."
+      label: "Imported card account",
+      title: "Wave account name to switch away from when an imported card transaction uses the feed account.",
+      help: "Type the account Wave starts with after importing the transaction. The Switch account button changes this to the preferred account below, and back again."
     },
     {
       path: "wave.accounts.creditCard",
-      label: "Switch account 2",
-      title: "Second saved Wave account used by the account switch helper.",
-      help: "Second account used by the floating Wave account switcher."
+      label: "Preferred account",
+      title: "Wave account name to use instead of the imported card account.",
+      help: "Type the Cash & Bank account you want to use instead. The same Switch account button can change this value back to the imported card account."
     }
   ];
 
@@ -1253,31 +1253,23 @@
   function captureSection() {
     if (!ah.sites.wave?.detect?.isWave()) return null;
     const captureRow = ah.core.dom.el("div", { class: "ah-pill-row" }, [
-      captureButton("Use current account", "wave.defaultAliExpressAccount", () =>
+      captureButton("Copy account", "wave.defaultAliExpressAccount", () =>
         ah.sites.wave.transactionModal.readField(["account", "payment account"]),
-        "Save the current Wave Account field as the default AliExpress account."
+        "Copy the visible Wave Account field into the default AliExpress account setting."
       ),
-      captureButton("Save account 1", "wave.accounts.amex", () =>
-        ah.sites.wave.transactionModal.readField(["account", "payment account"]),
-        "Save the current Wave Account field as switch account 1."
-      ),
-      captureButton("Save account 2", "wave.accounts.creditCard", () =>
-        ah.sites.wave.transactionModal.readField(["account", "payment account"]),
-        "Save the current Wave Account field as switch account 2."
-      ),
-      captureButton("Use current category", "wave.defaultAliExpressCategory", () =>
+      captureButton("Copy category", "wave.defaultAliExpressCategory", () =>
         ah.sites.wave.transactionModal.readField(["category"]),
-        "Save the current Wave Category field as the default AliExpress category."
+        "Copy the visible Wave Category field into the default AliExpress category setting."
       ),
-      captureButton("Use current vendor", "wave.defaultAliExpressVendor", () =>
+      captureButton("Copy vendor", "wave.defaultAliExpressVendor", () =>
         ah.sites.wave.transactionModal.readField(["vendor", "payee", "merchant"]),
-        "Save the current Wave Vendor/Payee field as the default AliExpress vendor."
+        "Copy the visible Wave Vendor/Payee field into the default AliExpress vendor setting."
       )
     ]);
     return section(
-      "Capture from current Wave transaction",
+      "Copy from the open Wave transaction",
       [captureRow],
-      "Open a Wave edit transaction modal first, then save the current field values into Tampermonkey settings."
+      "Optional shortcut for AliExpress defaults: open a Wave edit transaction first, then copy the visible Account, Category, or Vendor/Payee value into the fields above."
     );
   }
 
@@ -1320,8 +1312,20 @@
     }, [tabIntro(tab)]);
 
     if (tab.id === "general") {
+      panel.append(
+        section("Wave account switcher", [
+          fieldGrid(helperFields),
+          checkList(waveHelperChecks)
+        ], "For imported card transactions: type the account Wave starts with and the account you actually want. The floating Switch account button changes the Account field between those two values.")
+      );
+    }
+
+    if (tab.id === "aliexpress") {
       const capture = captureSection();
       panel.append(
+        section("Currencies", [
+          fieldGrid(aliExpressFields)
+        ], "Used by AliExpress order total conversion and copy helpers."),
         section("Wave defaults for AliExpress orders", [
           fieldGrid(waveDefaultFields),
           selectFor(
@@ -1332,23 +1336,11 @@
             "Applied when an AliExpress order fills a Wave transaction."
           )
         ], "Values used when a staged AliExpress order fills fields in Wave."),
-        section("Wave helper behavior", [
-          fieldGrid(helperFields),
-          checkList(waveHelperChecks)
-        ], "Controls for helper buttons shown inside Wave.")
-      );
-      if (capture) panel.append(capture);
-    }
-
-    if (tab.id === "aliexpress") {
-      panel.append(
-        section("Currencies", [
-          fieldGrid(aliExpressFields)
-        ], "Used by AliExpress order total conversion and copy helpers."),
         section("Staging and fill behavior", [
           checkList(aliToWaveChecks)
         ], "Clicking Stage for Wave stores one pending order. If Wave is already open, no duplicate tab is opened.")
       );
+      if (capture) panel.append(capture);
     }
 
     if (tab.id === "about") {
