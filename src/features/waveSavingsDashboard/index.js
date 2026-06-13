@@ -120,6 +120,18 @@
     document.body.append(backdrop);
   }
 
+  function stageFakeAliExpressOrder() {
+    const payload = ah.features.aliToWave.payload.createAliToWavePayload({
+      orderId: `TEST-${Date.now()}`,
+      orderDate: new Date().toISOString().slice(0, 10),
+      cadAmount: "12.34",
+      sourceUrl: "accounting-helpers-test"
+    });
+    payload.wave.vendor = ah.core.settings.get("wave.defaultAliExpressVendor", "") || "Aliexpress";
+    const ok = ah.features.aliToWave.stageFromAliExpress.savePendingPayload(payload);
+    ah.ui.toast.show(ok ? "Staged fake AliExpress order for Wave testing." : "Could not stage fake AliExpress order.", { tone: ok ? "success" : "error" });
+  }
+
   function ensure() {
     if (!ah.sites.wave.detect.isWave()) return;
     let panel = document.getElementById("ah-wave-panel");
@@ -166,6 +178,16 @@
         title: "Open Accounting Helpers settings, including local Account 1 and Account 2 setup.",
         onclick: () => ah.ui.settingsModal.open()
       }, "Settings"));
+    }
+    if (!panel.querySelector("[data-ah-stage-fake-ali]")) {
+      panel.append(ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button ah-button-secondary",
+        "data-ah-stage-fake-ali": "1",
+        style: "min-height:28px;padding:5px 8px;",
+        title: "Stage a fake AliExpress order for testing the Wave create-and-fill workflow.",
+        onclick: stageFakeAliExpressOrder
+      }, "Stage fake Ali"));
     }
     updateSavingsUI();
   }

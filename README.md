@@ -78,7 +78,20 @@ The dev server generates that bundle from the current source files on each reque
 http://127.0.0.1:5173/accounting-helpers.modules.json
 ```
 
-Refresh the Wave or AliExpress page after editing source files. Normal source, UI, selector, and runtime edits do not require reinstalling the Tampermonkey script while `tools/dev-server.js` is running. They also do not usually require restarting the server because the runtime, status endpoint, and live bundle are read from disk on request. Restart the server when changing `tools/dev-server.js`, when validation setup may be stale, or before handing browser validation to an agent.
+Refresh the Wave or AliExpress page after editing source files. Normal source, UI, selector, and runtime edits do not require reinstalling the Tampermonkey script while `tools/dev-server.js` is running. They also do not usually require restarting the server because the runtime, status endpoint, and live bundle are read from disk on request.
+
+Before restarting the dev server, check:
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:5173/accounting-helpers.dev-status.json
+```
+
+Restart only when one of these is true:
+
+- The status or health endpoint is unreachable.
+- The reported app version, bootstrap version, module count, runtime URL, or bundle URL is stale or wrong after running `node tools/build-release.js`.
+- `tools/dev-server.js`, `tools/dev-runtime.js`, server startup scripts, or generated userscript metadata/bootstrap behavior changed.
+- The existing dev server is serving errors, stale files, or an unknown process state.
 
 When adding, removing, or reordering modules, update `sourceFiles` in `tools/build-release.js` and rerun the build.
 
@@ -91,7 +104,7 @@ The app/release version and dev bootstrap version are intentionally separate:
 
 The dev runtime shows a compact in-page status panel with the app version, installed bootstrap version, server status, and an update button when the bootstrap is stale.
 
-Agent validation should use:
+When a restart is actually needed, use:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/restart-dev-server.ps1
@@ -99,7 +112,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/restart-dev-server.ps1
 
 That command stops any stale dev server, rebuilds the generated userscripts, starts the server in the background, and checks `http://127.0.0.1:5173/health`.
 
-After agent validation restarts the dev server, the agent should refresh the relevant Wave or AliExpress browser page so Tampermonkey loads the latest served runtime and bundle.
+For ordinary source validation when the status endpoint is already healthy and current, do not restart. Run `node tools/build-release.js`, then refresh the relevant Wave or AliExpress browser page so Tampermonkey loads the latest served runtime and bundle.
 
 Tampermonkey limitation: agents cannot directly edit the installed Tampermonkey script. To avoid that problem, keep the installed dev userscript as a stable bootstrap and put future loader changes in `tools/dev-runtime.js`. Metadata changes such as new `@match`, `@grant`, or `@connect` entries still require a one-time Tampermonkey update by the user.
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.17
+// @version      0.1.19
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -29,7 +29,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.17",
+    version: "0.1.19",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -217,7 +217,6 @@
       autoOpenWave: false,
       autoCreateWithdrawal: false,
       autoFillPending: false,
-      autoSaveAfterFill: false,
       allowReimport: false
     }
   };
@@ -1156,12 +1155,6 @@
       title: "When on, a staged AliExpress order opens Add withdrawal in Wave and fills it automatically.",
       help: "Only runs when Wave is on the transactions page and no transaction modal is already open."
     },
-    {
-      path: "aliToWave.autoSaveAfterFill",
-      label: "Save Wave transaction after every field was filled",
-      title: "Wave transactions are not saved automatically unless this is enabled.",
-      help: "Only clicks Save when the AliExpress payload filled every required Wave field."
-    }
   ];
 
   function inputFor(field) {
@@ -1637,7 +1630,7 @@
   }
 
   function visibleOptions(field) {
-    const selector = "[role='option'], [role='menuitemradio'], .wv-select__menu__option, [data-testid*='option']";
+    const selector = "[role='option'], [role='menuitemradio'], .wv-select__menu__option";
     const wrapper = selectWrapper(field);
     const scoped = wrapper ? dom().visible(dom().qsa(selector, wrapper)) : [];
     return scoped.length ? scoped : dom().visible(dom().qsa(selector));
@@ -1651,16 +1644,12 @@
   }
 
   async function closeMenu(field) {
-    const eventOptions = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true };
-    field.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
-    document.activeElement?.dispatchEvent?.(new KeyboardEvent("keydown", eventOptions));
-    document.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
-    document.activeElement?.blur?.();
     await new Promise((resolve) => setTimeout(resolve, 120));
     if (visibleOptions(field).length) {
       field.click();
       await new Promise((resolve) => setTimeout(resolve, 120));
     }
+    field.blur?.();
   }
 
   async function chooseOption(field, optionText) {
@@ -1763,6 +1752,7 @@
     if (labelList.some((label) => ["account", "category", "vendor", "payee", "merchant"].includes(label))) {
       const field = findWaveSelectByLabel(root, labels);
       if (field) return field;
+      return null;
     }
     return ah.core.dom.findFieldByLabel(root, labels);
   }
@@ -1799,7 +1789,7 @@
     const root = findOpenModal() || document;
     const labelList = Array.isArray(labels) ? labels : [labels];
     const button = labelList
-      .map((label) => ah.core.dom.findByText(root, ah.sites.wave.selectors.buttons, label))
+      .map((label) => ah.core.dom.findByText(root, `${ah.sites.wave.selectors.buttons}, a`, label))
       .find(Boolean);
     if (!button) return false;
     button.click();
@@ -1955,18 +1945,13 @@
     const filled = results.filter((result) => result.ok && !result.skipped).map((result) => result.name);
     const skipped = results.filter((result) => result.skipped).map((result) => result.name);
     const missing = results.filter((result) => !result.ok).map((result) => `${result.name} (${result.reason})`);
-    let saved = false;
-    if (settings.aliToWave.autoSaveAfterFill && missing.length === 0) {
-      saved = ah.sites.wave.transactionModal.clickButton(["Save", "Update"]);
-    }
-
     return {
       ok: filled.length > 0,
       complete: filled.length > 0 && missing.length === 0,
       filled,
       skipped,
       missing,
-      saved,
+      saved: false,
       message: missing.length ?
         `Partially filled Wave transaction. Filled: ${filled.join(", ") || "none"}. Could not fill: ${missing.join(", ")}.` :
         `Filled Wave transaction from AliExpress order ${payload.orderId}.`
@@ -2235,6 +2220,18 @@
     document.body.append(backdrop);
   }
 
+  function stageFakeAliExpressOrder() {
+    const payload = ah.features.aliToWave.payload.createAliToWavePayload({
+      orderId: `TEST-${Date.now()}`,
+      orderDate: new Date().toISOString().slice(0, 10),
+      cadAmount: "12.34",
+      sourceUrl: "accounting-helpers-test"
+    });
+    payload.wave.vendor = ah.core.settings.get("wave.defaultAliExpressVendor", "") || "Aliexpress";
+    const ok = ah.features.aliToWave.stageFromAliExpress.savePendingPayload(payload);
+    ah.ui.toast.show(ok ? "Staged fake AliExpress order for Wave testing." : "Could not stage fake AliExpress order.", { tone: ok ? "success" : "error" });
+  }
+
   function ensure() {
     if (!ah.sites.wave.detect.isWave()) return;
     let panel = document.getElementById("ah-wave-panel");
@@ -2281,6 +2278,16 @@
         title: "Open Accounting Helpers settings, including local Account 1 and Account 2 setup.",
         onclick: () => ah.ui.settingsModal.open()
       }, "Settings"));
+    }
+    if (!panel.querySelector("[data-ah-stage-fake-ali]")) {
+      panel.append(ah.core.dom.el("button", {
+        type: "button",
+        class: "ah-button ah-button-secondary",
+        "data-ah-stage-fake-ali": "1",
+        style: "min-height:28px;padding:5px 8px;",
+        title: "Stage a fake AliExpress order for testing the Wave create-and-fill workflow.",
+        onclick: stageFakeAliExpressOrder
+      }, "Stage fake Ali"));
     }
     updateSavingsUI();
   }
@@ -3347,7 +3354,6 @@
   function recordCreateFillSavings(opened, result) {
     if (!result?.complete) return;
     const steps = [...(opened.clicksSavedSteps || []), "Fill staged AliExpress order"];
-    if (result.saved) steps.push("Save transaction");
     if (!steps.length) return;
     ah.features.waveSavingsDashboard?.addClicks?.(
       steps.length,

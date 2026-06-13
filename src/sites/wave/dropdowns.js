@@ -27,7 +27,7 @@
   }
 
   function visibleOptions(field) {
-    const selector = "[role='option'], [role='menuitemradio'], .wv-select__menu__option, [data-testid*='option']";
+    const selector = "[role='option'], [role='menuitemradio'], .wv-select__menu__option";
     const wrapper = selectWrapper(field);
     const scoped = wrapper ? dom().visible(dom().qsa(selector, wrapper)) : [];
     return scoped.length ? scoped : dom().visible(dom().qsa(selector));
@@ -41,16 +41,12 @@
   }
 
   async function closeMenu(field) {
-    const eventOptions = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true };
-    field.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
-    document.activeElement?.dispatchEvent?.(new KeyboardEvent("keydown", eventOptions));
-    document.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
-    document.activeElement?.blur?.();
     await new Promise((resolve) => setTimeout(resolve, 120));
     if (visibleOptions(field).length) {
       field.click();
       await new Promise((resolve) => setTimeout(resolve, 120));
     }
+    field.blur?.();
   }
 
   async function chooseOption(field, optionText) {

@@ -46,6 +46,7 @@
     if (labelList.some((label) => ["account", "category", "vendor", "payee", "merchant"].includes(label))) {
       const field = findWaveSelectByLabel(root, labels);
       if (field) return field;
+      return null;
     }
     return ah.core.dom.findFieldByLabel(root, labels);
   }
@@ -82,7 +83,7 @@
     const root = findOpenModal() || document;
     const labelList = Array.isArray(labels) ? labels : [labels];
     const button = labelList
-      .map((label) => ah.core.dom.findByText(root, ah.sites.wave.selectors.buttons, label))
+      .map((label) => ah.core.dom.findByText(root, `${ah.sites.wave.selectors.buttons}, a`, label))
       .find(Boolean);
     if (!button) return false;
     button.click();

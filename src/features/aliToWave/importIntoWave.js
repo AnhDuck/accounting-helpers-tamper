@@ -69,7 +69,6 @@
   function recordCreateFillSavings(opened, result) {
     if (!result?.complete) return;
     const steps = [...(opened.clicksSavedSteps || []), "Fill staged AliExpress order"];
-    if (result.saved) steps.push("Save transaction");
     if (!steps.length) return;
     ah.features.waveSavingsDashboard?.addClicks?.(
       steps.length,

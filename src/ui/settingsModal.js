@@ -117,12 +117,6 @@
       title: "When on, a staged AliExpress order opens Add withdrawal in Wave and fills it automatically.",
       help: "Only runs when Wave is on the transactions page and no transaction modal is already open."
     },
-    {
-      path: "aliToWave.autoSaveAfterFill",
-      label: "Save Wave transaction after every field was filled",
-      title: "Wave transactions are not saved automatically unless this is enabled.",
-      help: "Only clicks Save when the AliExpress payload filled every required Wave field."
-    }
   ];
 
   function inputFor(field) {

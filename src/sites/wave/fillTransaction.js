@@ -61,18 +61,13 @@
     const filled = results.filter((result) => result.ok && !result.skipped).map((result) => result.name);
     const skipped = results.filter((result) => result.skipped).map((result) => result.name);
     const missing = results.filter((result) => !result.ok).map((result) => `${result.name} (${result.reason})`);
-    let saved = false;
-    if (settings.aliToWave.autoSaveAfterFill && missing.length === 0) {
-      saved = ah.sites.wave.transactionModal.clickButton(["Save", "Update"]);
-    }
-
     return {
       ok: filled.length > 0,
       complete: filled.length > 0 && missing.length === 0,
       filled,
       skipped,
       missing,
-      saved,
+      saved: false,
       message: missing.length ?
         `Partially filled Wave transaction. Filled: ${filled.join(", ") || "none"}. Could not fill: ${missing.join(", ")}.` :
         `Filled Wave transaction from AliExpress order ${payload.orderId}.`
