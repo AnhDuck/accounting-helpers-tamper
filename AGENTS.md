@@ -16,6 +16,14 @@ Rules:
 - Run `node tools/build-release.js` after source-module, metadata, settings, UI, or behavior changes so `dist/accounting-helpers.user.js`, `userscript/accounting-helpers.release.user.js`, and `userscript/accounting-helpers.dev.user.js` stay aligned.
 - For local Tampermonkey testing or validation, run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/restart-dev-server.ps1` without asking the user. This must stop any stale dev server, rebuild generated scripts, start the server, and health-check it.
 - If source, dev-loader, build, or dev-server code changes, restart the dev server automatically before browser validation. Do this even if the user did not say whether the server is running.
+- After restarting the dev server for validation, refresh the relevant already-open Wave or AliExpress browser page so Tampermonkey loads the latest runtime/bundle. Do not ask the user to refresh when browser tooling is available.
 - The installed dev userscript loads the server-side dev runtime, and that runtime loads one live bundle from the local dev server on each page load; avoid per-module `@require` or sequential per-file fetches because they make page refreshes slow.
 - Bump the app/release version in `tools/build-release.js` and `src/core/constants.js` for every user-facing behavior, settings, or UI change.
 - Run `node tools/build-release.js` before testing the installable release script.
+
+Validation checklist for agents:
+
+1. Run focused syntax/build checks for the changed files.
+2. Run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/restart-dev-server.ps1` when validation depends on the local dev server or when server/build/runtime state may be stale.
+3. Confirm `http://127.0.0.1:5173/accounting-helpers.dev-status.json` reports the expected app and bootstrap versions.
+4. Refresh the relevant Wave or AliExpress tab and verify the changed UI/behavior.

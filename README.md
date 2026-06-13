@@ -78,7 +78,9 @@ The dev server generates that bundle from the current source files on each reque
 http://127.0.0.1:5173/accounting-helpers.modules.json
 ```
 
-Refresh the Wave or AliExpress page after editing source files. Normal code edits do not require reinstalling the Tampermonkey script while `tools/dev-server.js` is running. When adding, removing, or reordering modules, update `sourceFiles` in `tools/build-release.js` and rerun the build.
+Refresh the Wave or AliExpress page after editing source files. Normal source, UI, selector, and runtime edits do not require reinstalling the Tampermonkey script while `tools/dev-server.js` is running. They also do not usually require restarting the server because the runtime, status endpoint, and live bundle are read from disk on request. Restart the server when changing `tools/dev-server.js`, when validation setup may be stale, or before handing browser validation to an agent.
+
+When adding, removing, or reordering modules, update `sourceFiles` in `tools/build-release.js` and rerun the build.
 
 The app/release version and dev bootstrap version are intentionally separate:
 
@@ -96,6 +98,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/restart-dev-server.ps1
 ```
 
 That command stops any stale dev server, rebuilds the generated userscripts, starts the server in the background, and checks `http://127.0.0.1:5173/health`.
+
+After agent validation restarts the dev server, the agent should refresh the relevant Wave or AliExpress browser page so Tampermonkey loads the latest served runtime and bundle.
 
 Tampermonkey limitation: agents cannot directly edit the installed Tampermonkey script. To avoid that problem, keep the installed dev userscript as a stable bootstrap and put future loader changes in `tools/dev-runtime.js`. Metadata changes such as new `@match`, `@grant`, or `@connect` entries still require a one-time Tampermonkey update by the user.
 
