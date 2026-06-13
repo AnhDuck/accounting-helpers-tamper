@@ -48,13 +48,32 @@ dist/accounting-helpers.user.js
 
 ## Development Loader
 
-`userscript/accounting-helpers.dev.user.js` loads files from:
+Build once, then start the local dev server:
+
+```powershell
+node tools/build-release.js
+node tools/dev-server.js
+```
+
+Install the dev userscript from:
+
+```text
+http://127.0.0.1:5173/userscript/accounting-helpers.dev.user.js
+```
+
+The installed dev userscript fetches its module list from:
+
+```text
+http://127.0.0.1:5173/accounting-helpers.modules.json
+```
+
+Then it loads current source files from:
 
 ```text
 http://127.0.0.1:5173/src/...
 ```
 
-Use any static server rooted at this repo if you want live module loading during development.
+Refresh the Wave or AliExpress page after editing source files. Normal code edits do not require reinstalling the Tampermonkey script while `tools/dev-server.js` is running. When adding, removing, or reordering modules, update `sourceFiles` in `tools/build-release.js` and rerun the build.
 
 ## Debug
 
