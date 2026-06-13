@@ -68,6 +68,7 @@
 
     return {
       ok: filled.length > 0,
+      complete: filled.length > 0 && missing.length === 0,
       filled,
       skipped,
       missing,

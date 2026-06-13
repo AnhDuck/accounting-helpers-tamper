@@ -5,8 +5,9 @@
 
   function findOpenModal() {
     const selector = ah.sites.wave.selectors.modal;
-    const modals = ah.core.dom.visible(ah.core.dom.qsa(selector));
-    return modals.find((modal) => /\b(add|edit)\s+transaction\b/i.test(ah.core.dom.text(modal))) || null;
+    const modals = ah.core.dom.visible(ah.core.dom.qsa(selector))
+      .filter((modal) => !modal.closest("#ah-settings-modal") && !modal.classList.contains("ah-modal"));
+    return modals.find((modal) => /(add|edit)\s+transaction/i.test(ah.core.dom.text(modal))) || null;
   }
 
   function findWaveSelectByLabel(root, labels) {

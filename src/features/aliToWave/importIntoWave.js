@@ -23,8 +23,8 @@
 
   async function fillOpenTransaction(payload) {
     const result = await ah.sites.wave.fillTransaction.fillFromAliPayload(payload);
-    ah.ui.toast.show(result.message, { tone: result.ok ? "success" : "warn" });
-    if (result.ok) {
+    ah.ui.toast.show(result.message, { tone: result.complete ? "success" : "warn" });
+    if (result.complete) {
       ah.features.aliToWave.duplicateGuard.markImported(payload);
       clearPendingPayload();
     }
@@ -148,6 +148,9 @@
       removeModalActions();
       return;
     }
+    document.querySelectorAll(`.${modalActionsClass}`).forEach((node) => {
+      if (!modal.contains(node)) node.remove();
+    });
     let actions = modal.querySelector(`.${modalActionsClass}`);
     if (!actions) {
       actions = renderModalActions(payload);
@@ -199,6 +202,11 @@
       ah.ui.floatingPanel.remove(bannerId);
       removeModalActions();
       autoCreateAttemptKey = "";
+      return;
+    }
+    if (document.getElementById("ah-settings-modal")) {
+      ah.ui.floatingPanel.remove(bannerId);
+      removeModalActions();
       return;
     }
     if (ah.sites.wave.transactionModal.findOpenModal()) {

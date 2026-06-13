@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.8
+// @version      0.1.10
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -29,7 +29,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.8",
+    version: "0.1.10",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -1615,6 +1615,17 @@
 
   const dom = () => ah.core.dom;
 
+  function isSelected(field, optionText) {
+    const text = dom().text(field).toLowerCase();
+    const value = String(field.value || "").toLowerCase();
+    const needle = String(optionText || "").toLowerCase();
+    return !!needle && (text.includes(needle) || value.includes(needle));
+  }
+
+  function visibleOptions() {
+    return dom().visible(dom().qsa("[role='option'], li, button, [data-testid*='option']"));
+  }
+
   async function chooseOption(field, optionText) {
     if (!field || !optionText) return false;
     field.focus();
@@ -1630,14 +1641,25 @@
       return true;
     }
 
-    ah.core.react.setFieldValue(field, optionText);
+    field.click();
     await new Promise((resolve) => setTimeout(resolve, 180));
-    const option = dom().findByText(document, "[role='option'], li, button, [data-testid*='option']", optionText);
+    let option = visibleOptions().find((item) => dom().text(item).toLowerCase().includes(optionText.toLowerCase()));
+    if (!option) {
+      const active = document.activeElement;
+      if (active && ["INPUT", "TEXTAREA"].includes(active.tagName)) {
+        ah.core.react.setFieldValue(active, optionText);
+      } else {
+        ah.core.react.setFieldValue(field, optionText);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      option = visibleOptions().find((item) => dom().text(item).toLowerCase().includes(optionText.toLowerCase()));
+    }
     if (option) {
       option.click();
-      return true;
+      await new Promise((resolve) => setTimeout(resolve, 220));
+      return isSelected(field, optionText);
     }
-    return true;
+    return isSelected(field, optionText);
   }
 
   function getVisibleSelection(labels) {
@@ -1658,8 +1680,9 @@
 
   function findOpenModal() {
     const selector = ah.sites.wave.selectors.modal;
-    const modals = ah.core.dom.visible(ah.core.dom.qsa(selector));
-    return modals.find((modal) => /\b(add|edit)\s+transaction\b/i.test(ah.core.dom.text(modal))) || null;
+    const modals = ah.core.dom.visible(ah.core.dom.qsa(selector))
+      .filter((modal) => !modal.closest("#ah-settings-modal") && !modal.classList.contains("ah-modal"));
+    return modals.find((modal) => /(add|edit)\s+transaction/i.test(ah.core.dom.text(modal))) || null;
   }
 
   function findWaveSelectByLabel(root, labels) {
@@ -1897,6 +1920,7 @@
 
     return {
       ok: filled.length > 0,
+      complete: filled.length > 0 && missing.length === 0,
       filled,
       skipped,
       missing,
@@ -3235,8 +3259,8 @@
 
   async function fillOpenTransaction(payload) {
     const result = await ah.sites.wave.fillTransaction.fillFromAliPayload(payload);
-    ah.ui.toast.show(result.message, { tone: result.ok ? "success" : "warn" });
-    if (result.ok) {
+    ah.ui.toast.show(result.message, { tone: result.complete ? "success" : "warn" });
+    if (result.complete) {
       ah.features.aliToWave.duplicateGuard.markImported(payload);
       clearPendingPayload();
     }
@@ -3360,6 +3384,9 @@
       removeModalActions();
       return;
     }
+    document.querySelectorAll(`.${modalActionsClass}`).forEach((node) => {
+      if (!modal.contains(node)) node.remove();
+    });
     let actions = modal.querySelector(`.${modalActionsClass}`);
     if (!actions) {
       actions = renderModalActions(payload);
@@ -3411,6 +3438,11 @@
       ah.ui.floatingPanel.remove(bannerId);
       removeModalActions();
       autoCreateAttemptKey = "";
+      return;
+    }
+    if (document.getElementById("ah-settings-modal")) {
+      ah.ui.floatingPanel.remove(bannerId);
+      removeModalActions();
       return;
     }
     if (ah.sites.wave.transactionModal.findOpenModal()) {

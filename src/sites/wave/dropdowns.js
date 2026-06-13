@@ -5,6 +5,17 @@
 
   const dom = () => ah.core.dom;
 
+  function isSelected(field, optionText) {
+    const text = dom().text(field).toLowerCase();
+    const value = String(field.value || "").toLowerCase();
+    const needle = String(optionText || "").toLowerCase();
+    return !!needle && (text.includes(needle) || value.includes(needle));
+  }
+
+  function visibleOptions() {
+    return dom().visible(dom().qsa("[role='option'], li, button, [data-testid*='option']"));
+  }
+
   async function chooseOption(field, optionText) {
     if (!field || !optionText) return false;
     field.focus();
@@ -20,14 +31,25 @@
       return true;
     }
 
-    ah.core.react.setFieldValue(field, optionText);
+    field.click();
     await new Promise((resolve) => setTimeout(resolve, 180));
-    const option = dom().findByText(document, "[role='option'], li, button, [data-testid*='option']", optionText);
+    let option = visibleOptions().find((item) => dom().text(item).toLowerCase().includes(optionText.toLowerCase()));
+    if (!option) {
+      const active = document.activeElement;
+      if (active && ["INPUT", "TEXTAREA"].includes(active.tagName)) {
+        ah.core.react.setFieldValue(active, optionText);
+      } else {
+        ah.core.react.setFieldValue(field, optionText);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      option = visibleOptions().find((item) => dom().text(item).toLowerCase().includes(optionText.toLowerCase()));
+    }
     if (option) {
       option.click();
-      return true;
+      await new Promise((resolve) => setTimeout(resolve, 220));
+      return isSelected(field, optionText);
     }
-    return true;
+    return isSelected(field, optionText);
   }
 
   function getVisibleSelection(labels) {
