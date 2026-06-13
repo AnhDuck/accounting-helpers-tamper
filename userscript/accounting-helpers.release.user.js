@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.5
+// @version      0.1.6
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -29,7 +29,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.5",
+    version: "0.1.6",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -929,7 +929,7 @@
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
   ah.ui = ah.ui || {};
 
-  const defaultTimeout = 11000;
+  const defaultTimeout = 7000;
   const toneTitles = {
     success: "Done",
     warn: "Needs attention",

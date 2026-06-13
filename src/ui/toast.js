@@ -2,7 +2,7 @@
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
   ah.ui = ah.ui || {};
 
-  const defaultTimeout = 11000;
+  const defaultTimeout = 7000;
   const toneTitles = {
     success: "Done",
     warn: "Needs attention",
