@@ -3,8 +3,8 @@
   let storageListenersInstalled = false;
 
   function installDebugObject() {
-    if (window.AccountingHelpersDebug) return;
-    window.AccountingHelpersDebug = {
+    const debug = window.AccountingHelpersDebug = window.AccountingHelpersDebug || {};
+    Object.assign(debug, {
       getSettings() {
         return ah.core.settings.all();
       },
@@ -26,8 +26,32 @@
       },
       getLogs() {
         return ah.core.logger.getLogs();
+      },
+      runDiagnostics() {
+        return ah.features.diagnostics.runDiagnostics();
+      },
+      runStorageDiagnostics() {
+        return ah.features.diagnostics.runStorageDiagnostics();
+      },
+      runWaveDiagnostics() {
+        return ah.features.diagnostics.runWaveDiagnostics();
+      },
+      runAliToWaveDiagnostics() {
+        return ah.features.diagnostics.runAliToWaveDiagnostics();
+      },
+      exportDebugReport() {
+        return ah.features.diagnostics.exportDebugReport();
+      },
+      copyDebugReport() {
+        return ah.features.diagnostics.copyDebugReport();
+      },
+      getLastDiagnostics() {
+        return ah.features.diagnostics.getLastDiagnostics();
+      },
+      getLastFillResult() {
+        return ah.features.aliToWave.getLastFillResult?.() || ah.features.aliToWave.lastFillResult || null;
       }
-    };
+    });
   }
 
   function ensureAll() {
@@ -35,6 +59,7 @@
     ah.ui.toast.ensureToastLayer();
     ah.ui.settingsModal.registerMenuCommand();
     installDebugObject();
+    ah.features.diagnostics.ensure();
 
     if (ah.sites.wave.detect.isWave()) {
       ah.sites.wave.heartbeat?.ensure?.();

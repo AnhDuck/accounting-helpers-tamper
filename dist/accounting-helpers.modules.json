@@ -33,6 +33,7 @@
     "src/features/aliToWave/duplicateGuard.js",
     "src/features/aliToWave/stageFromAliExpress.js",
     "src/features/aliToWave/importIntoWave.js",
+    "src/features/diagnostics/index.js",
     "src/init.js"
   ]
 }

@@ -74,5 +74,11 @@
     };
   }
 
-  ah.sites.wave.transactionList = { findCurrentRow, clickCopyOnCurrentRow, openAddWithdrawalModal };
+  ah.sites.wave.transactionList = {
+    findCurrentRow,
+    clickCopyOnCurrentRow,
+    findAddTransactionButton,
+    findAddWithdrawalMenuItem,
+    openAddWithdrawalModal
+  };
 })();

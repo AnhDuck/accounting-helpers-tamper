@@ -3,10 +3,12 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.19",
+    version: "0.1.21",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
+      settingsBackup: "accountingHelpers.settings.backup",
+      settingsAuditLog: "accountingHelpers.settings.auditLog",
       logs: "accountingHelpers.logs",
       savings: "wave.savingsDashboard",
       aliPendingPayload: "aliToWave.pendingPayload",

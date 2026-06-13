@@ -22,14 +22,27 @@
     window.dispatchEvent(new CustomEvent(ah.core.constants.events.pendingPayloadChanged));
   }
 
+  function recordLastFillResult(result) {
+    const next = Object.assign({ recordedAt: new Date().toISOString() }, result || {});
+    ah.features.aliToWave.lastFillResult = next;
+    return next;
+  }
+
   async function fillOpenTransaction(payload) {
     const result = await ah.sites.wave.fillTransaction.fillFromAliPayload(payload);
-    ah.ui.toast.show(result.message, { tone: result.complete ? "success" : "warn" });
+    let duplicateGuardMarkedImported = false;
+    let pendingPayloadCleared = false;
     if (result.complete) {
-      ah.features.aliToWave.duplicateGuard.markImported(payload);
+      duplicateGuardMarkedImported = ah.features.aliToWave.duplicateGuard.markImported(payload);
       clearPendingPayload();
+      pendingPayloadCleared = true;
     }
-    return result;
+    const detailedResult = recordLastFillResult(Object.assign({}, result, {
+      duplicateGuardMarkedImported,
+      pendingPayloadCleared
+    }));
+    ah.ui.toast.show(detailedResult.message, { tone: detailedResult.complete ? "success" : "warn" });
+    return detailedResult;
   }
 
   function payloadKey(payload) {
@@ -42,10 +55,10 @@
 
   async function createWithdrawalAndFill(payload, options) {
     if (createFillInFlight) {
-      return { ok: false, message: "Wave helper is already creating a withdrawal." };
+      return recordLastFillResult({ ok: false, complete: false, message: "Wave helper is already creating a withdrawal." });
     }
     if (ah.sites.wave.transactionModal.findOpenModal()) {
-      const result = { ok: false, message: "A Wave transaction modal is already open. Review it or close it before creating a new withdrawal." };
+      const result = recordLastFillResult({ ok: false, complete: false, message: "A Wave transaction modal is already open. Review it or close it before creating a new withdrawal." });
       if (options?.toast !== false) ah.ui.toast.show(result.message, { tone: "warn" });
       return result;
     }
@@ -55,7 +68,7 @@
       const opened = await ah.sites.wave.transactionList.openAddWithdrawalModal();
       if (!opened.ok) {
         if (options?.toast !== false) ah.ui.toast.show(opened.message, { tone: "warn" });
-        return opened;
+        return recordLastFillResult(Object.assign({ complete: false }, opened));
       }
       autoFillAttemptKey = payloadKey(payload);
       const result = await fillOpenTransaction(payload);
@@ -174,6 +187,7 @@
   }
 
   async function maybeAutoFill(payload) {
+    if (payload?.debug?.autoFillSuppressed) return;
     const key = payloadKey(payload);
     if (autoFillInFlight || createFillInFlight || autoFillAttemptKey === key) return;
     if (!ah.core.settings.get("aliToWave.autoFillPending", false)) return;
@@ -188,6 +202,7 @@
   }
 
   async function maybeAutoCreateWithdrawal(payload) {
+    if (payload?.debug?.autoFillSuppressed) return;
     const key = payloadKey(payload);
     if (createFillInFlight || autoCreateAttemptKey === key) return;
     if (!ah.core.settings.get("aliToWave.autoCreateWithdrawal", false)) return;
@@ -227,4 +242,5 @@
 
   ah.features.aliToWave.importIntoWave = { pendingPayload, clearPendingPayload, fillOpenTransaction, createWithdrawalAndFill };
   ah.features.aliToWave.ensureWaveImportUI = ensureWaveImportUI;
+  ah.features.aliToWave.getLastFillResult = () => ah.features.aliToWave.lastFillResult || null;
 })();

@@ -28,3 +28,13 @@ Validation checklist for agents:
 3. Confirm `http://127.0.0.1:5173/accounting-helpers.dev-status.json` reports the expected app and bootstrap versions.
 4. Restart the dev server only if the status check fails or reports stale/wrong server state.
 5. Refresh the relevant Wave or AliExpress tab and verify the changed UI/behavior.
+
+Diagnostics/Test quick workflow for agents:
+
+- On Wave or AliExpress, use the bottom-left `Diagnostics/Test` button. Do not look for fake-order staging in the Wave bottom helper bar.
+- Click `Run diagnostics` first. Read the summary and the JSON textarea; this reports script identity, dev/release mode, storage backend, settings presence, pending payload state, Wave heartbeat/page/modal/field/dropdown state, AliExpress page state, recent logs, imported order count, and last fill result.
+- To test AliExpress-to-Wave without private order pages, click `Stage fake AliExpress order` inside the Diagnostics/Test modal. Expected payload: `TEST-ALI-ORDER-001`, `CAD 12.34`, source `aliexpress`, target `wave`, valid `true`.
+- After staging, click `Run diagnostics` again or read the refreshed report. Check `pendingPayload.valid`, `aliToWave.preflight.ok`, `canFillCurrentModal`, `canCreateWithdrawal`, `missing`, `warnings`, and `errors`.
+- The diagnostics fake payload has `debug.autoFillSuppressed`, so it should not auto-create or auto-fill Wave transactions. Use the normal pending-payload Wave buttons only when explicitly validating manual fill behavior.
+- Before finishing diagnostics-only validation, click `Clear pending payload` in the Diagnostics/Test modal and confirm the report shows `pendingPayload.exists: false`.
+- Use `Copy diagnostics JSON` when handing state to another agent. Prefer the copied JSON over screenshots or broad page scraping.

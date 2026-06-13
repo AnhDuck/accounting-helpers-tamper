@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const version = "0.1.19";
+const version = "0.1.21";
 const devBootstrapVersion = "0.1.16-dev";
 const devOrigin = process.env.ACCOUNTING_HELPERS_DEV_ORIGIN || "http://127.0.0.1:5173";
 
@@ -40,6 +40,7 @@ const sourceFiles = [
   "src/features/aliToWave/duplicateGuard.js",
   "src/features/aliToWave/stageFromAliExpress.js",
   "src/features/aliToWave/importIntoWave.js",
+  "src/features/diagnostics/index.js",
   "src/init.js"
 ];
 

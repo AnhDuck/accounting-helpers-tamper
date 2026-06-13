@@ -33,6 +33,11 @@
     return scoped.length ? scoped : dom().visible(dom().qsa(selector));
   }
 
+  function openDropdownNodes() {
+    const selector = "[role='listbox'], [role='menu'], [role='option'], [role='menuitemradio'], .wv-select__menu, .wv-select__menu__option";
+    return dom().visible(dom().qsa(selector));
+  }
+
   function findOption(field, optionText) {
     const needle = normalize(optionText);
     const options = visibleOptions(field);
@@ -40,13 +45,31 @@
       options.find((item) => normalize(dom().text(item)).includes(needle));
   }
 
-  async function closeMenu(field) {
+  async function closeSafely(field) {
+    const modalBefore = ah.sites.wave.transactionModal.findOpenModal();
     await new Promise((resolve) => setTimeout(resolve, 120));
-    if (visibleOptions(field).length) {
-      field.click();
-      await new Promise((resolve) => setTimeout(resolve, 120));
+    field?.blur?.();
+    const active = document.activeElement;
+    active?.blur?.();
+
+    if (openDropdownNodes().length) {
+      const neutral = modalBefore?.querySelector?.(".ah-ali-to-wave-modal-actions, h1, h2, h3, header") || modalBefore;
+      neutral?.click?.();
+      await new Promise((resolve) => setTimeout(resolve, 160));
     }
-    field.blur?.();
+
+    const modalAfter = ah.sites.wave.transactionModal.findOpenModal();
+    const openCount = openDropdownNodes().length;
+    return {
+      ok: openCount === 0 && (!modalBefore || !!modalAfter),
+      modalStillOpen: !modalBefore || !!modalAfter,
+      dropdownsOpenAfterClose: openCount > 0,
+      openCount
+    };
+  }
+
+  async function closeMenu(field) {
+    return closeSafely(field);
   }
 
   async function chooseOption(field, optionText) {
@@ -96,5 +119,10 @@
     return field.value || field.getAttribute("aria-label") || dom().text(field);
   }
 
-  ah.sites.wave.dropdowns = { chooseOption, getVisibleSelection };
+  function diagnostics() {
+    const openCount = openDropdownNodes().length;
+    return { anyOpen: openCount > 0, openCount };
+  }
+
+  ah.sites.wave.dropdowns = { chooseOption, getVisibleSelection, closeSafely, diagnostics };
 })();

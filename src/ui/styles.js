@@ -345,6 +345,51 @@
       }
       .ah-ae-row { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
       .ah-ae-total { color: #184f61; font-weight: 700; }
+      #ah-diagnostics-panel {
+        bottom: 62px;
+        left: 12px;
+        position: fixed;
+        z-index: 2147483646;
+      }
+      .ah-diagnostics-modal {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        max-height: calc(100vh - 24px);
+        width: min(980px, calc(100vw - 24px));
+      }
+      .ah-diagnostics-body {
+        display: grid;
+        gap: 12px;
+        min-height: 0;
+        overflow: auto;
+        padding: 16px;
+      }
+      .ah-diagnostics-report {
+        display: grid;
+        gap: 12px;
+        min-height: 0;
+      }
+      .ah-diagnostics-summary {
+        background: #f6fafb;
+        border: 1px solid #cbd9de;
+        border-radius: 8px;
+        color: #203b43;
+        display: grid;
+        font: 12px/1.45 system-ui, sans-serif;
+        gap: 4px;
+        padding: 10px 12px;
+      }
+      .ah-diagnostics-output {
+        border: 1px solid #aebdc2;
+        border-radius: 8px;
+        box-sizing: border-box;
+        color: #172f37;
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+        min-height: 360px;
+        padding: 12px;
+        resize: vertical;
+        width: 100%;
+      }
       @media (max-width: 760px) {
         .ah-modal-backdrop { align-items: stretch; padding: 8px; }
         .ah-settings-modal { height: calc(100vh - 16px); width: calc(100vw - 16px); }
