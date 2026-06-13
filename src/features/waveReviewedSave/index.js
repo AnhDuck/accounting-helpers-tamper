@@ -51,7 +51,7 @@
     const checkbox = ah.core.dom.el("input", { type: "checkbox", "data-ah-mark-reviewed-save": "1" });
     checkbox.checked = ah.core.settings.get("wave.markReviewedAutoSave", false);
     checkbox.addEventListener("change", () => {
-      ah.core.settings.set("wave.markReviewedAutoSave", checkbox.checked);
+      ah.core.settings.set("wave.markReviewedAutoSave", checkbox.checked, { source: "settings-modal" });
       ah.ui.toast.show(`Save after Mark as reviewed ${checkbox.checked ? "ON" : "OFF"}.`);
     });
     panel.append(ah.core.dom.el("label", {

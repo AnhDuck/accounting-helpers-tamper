@@ -9,7 +9,28 @@
         return ah.core.settings.all();
       },
       clearSettings() {
-        ah.core.settings.reset();
+        ah.core.settings.reset({ source: "debug-api" });
+      },
+      getSettingsBackup() {
+        return ah.core.settings.backup();
+      },
+      restoreSettingsBackup() {
+        return ah.core.settings.restoreBackup({ source: "debug-api" });
+      },
+      exportSettings() {
+        return ah.core.settings.exportSettings("debug-api");
+      },
+      importSettings(value) {
+        return ah.core.settings.importSettings(value, { source: "debug-api" });
+      },
+      getSettingsAuditLog() {
+        return ah.core.settings.getAuditLog();
+      },
+      clearSettingsAuditLog() {
+        return ah.core.settings.clearAuditLog();
+      },
+      getSettingsStatus() {
+        return ah.core.settings.status();
       },
       getPendingAliToWavePayload() {
         return ah.core.storage.get(ah.core.constants.storageKeys.aliPendingPayload, null);
@@ -57,6 +78,7 @@
   function ensureAll() {
     ah.ui.styles.ensureStyles();
     ah.ui.toast.ensureToastLayer();
+    ah.core.settings.startupCheck({ showWarning: true });
     ah.ui.settingsModal.registerMenuCommand();
     installDebugObject();
     ah.features.diagnostics.ensure();
@@ -75,6 +97,15 @@
       ah.features.aliexpressCartPerUnit.ensure();
       ah.features.aliToWave.ensureAliExpressSendButton();
     }
+
+    document.documentElement.dataset.accountingHelpersReadyVersion = ah.core.constants.version;
+    document.documentElement.dataset.accountingHelpersReadyAt = new Date().toISOString();
+    window.dispatchEvent(new CustomEvent("accounting-helpers:ready", {
+      detail: {
+        version: ah.core.constants.version,
+        at: document.documentElement.dataset.accountingHelpersReadyAt
+      }
+    }));
   }
 
   function installStorageListeners() {

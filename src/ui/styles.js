@@ -254,7 +254,9 @@
       .ah-settings-section > .ah-form-grid,
       .ah-settings-section > .ah-check-list,
       .ah-settings-section > .ah-pill-row,
-      .ah-settings-section > .ah-overview-grid {
+      .ah-settings-section > .ah-overview-grid,
+      .ah-settings-section > .ah-settings-data-tools,
+      .ah-settings-section > .ah-settings-warning {
         margin: 16px;
       }
       .ah-help { color: #5b7077; font: 12px/1.4 system-ui, sans-serif; margin: 0; }
@@ -330,6 +332,39 @@
       .ah-overview-card span {
         color: #60747a;
         font: 12px/1.4 system-ui, sans-serif;
+      }
+      .ah-status-warn {
+        border-color: #d79a2b;
+        background: #fffaf0;
+      }
+      .ah-settings-warning {
+        background: #fff7ed;
+        border: 1px solid #d79a2b;
+        border-radius: 8px;
+        color: #6b3a05;
+        display: grid;
+        font: 12px/1.45 system-ui, sans-serif;
+        gap: 4px;
+        padding: 10px 12px;
+      }
+      .ah-settings-data-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .ah-settings-data-stack {
+        display: grid;
+      }
+      .ah-settings-import {
+        border: 1px solid #aebdc2;
+        border-radius: 8px;
+        box-sizing: border-box;
+        color: #172f37;
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+        min-height: 160px;
+        padding: 12px;
+        resize: vertical;
+        width: 100%;
       }
       .ah-check { align-items: center; display: flex; gap: 8px; min-height: 30px; }
       .ah-check input { margin: 0; }

@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const version = "0.1.21";
+const version = "0.1.22";
 const devBootstrapVersion = "0.1.16-dev";
 const devOrigin = process.env.ACCOUNTING_HELPERS_DEV_ORIGIN || "http://127.0.0.1:5173";
 

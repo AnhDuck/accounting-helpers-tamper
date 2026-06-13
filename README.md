@@ -34,6 +34,8 @@ No account names, card digits, business category defaults, or private vendor lab
 
 Settings are stored with `GM_setValue`/`GM_getValue`.
 
+The dev userscript is named `Accounting Helpers Dev`; the release userscript is named `Accounting Helpers`. Tampermonkey treats script identity as part of stored-value ownership, so dev and release settings can be separate. Use Settings > Data to export settings before switching between dev and release, and import or restore from backup if settings appear missing.
+
 ## Build
 
 ```powershell
@@ -79,6 +81,17 @@ http://127.0.0.1:5173/accounting-helpers.modules.json
 ```
 
 Refresh the Wave or AliExpress page after editing source files. Normal source, UI, selector, and runtime edits do not require reinstalling the Tampermonkey script while `tools/dev-server.js` is running. They also do not usually require restarting the server because the runtime, status endpoint, and live bundle are read from disk on request.
+
+Validation must happen in Chrome with the user's installed Tampermonkey script. The Codex in-app browser is not suitable for this application because it does not run the installed Tampermonkey userscript, its grants, or the same GM storage identity.
+
+After refreshing Wave or AliExpress, wait for the userscript to finish injecting before running diagnostics. Wave can render its app shell before Accounting Helpers appears. Reliable readiness signals are:
+
+- `document.documentElement.dataset.accountingHelpersReadyVersion`
+- `document.documentElement.dataset.accountingHelpersReadyAt`
+- `#ah-diagnostics-panel`
+- `#ah-dev-status`
+
+If those signals are not present immediately after refresh, wait and check again before treating the helper as missing.
 
 Before restarting the dev server, check:
 

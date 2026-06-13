@@ -31,6 +31,19 @@
     }
   }
 
+  function backend() {
+    const gmGetValue = gmApi("GM_getValue");
+    const gmSetValue = gmApi("GM_setValue");
+    if (gmGetValue && gmSetValue) return "GM";
+    if (typeof localStorage === "object") return "localStorage";
+    return "unknown";
+  }
+
+  function has(key) {
+    const sentinel = { __accountingHelpersMissing: true };
+    return get(key, sentinel) !== sentinel;
+  }
+
   function set(key, value) {
     try {
       const gmSetValue = gmApi("GM_setValue");
@@ -86,5 +99,5 @@
     return null;
   }
 
-  ah.core.storage = { get, set, remove, keys, onChange };
+  ah.core.storage = { get, set, remove, keys, onChange, backend, has };
 })();

@@ -18,6 +18,13 @@
       description: "AliExpress display settings and controls for staging orders into Wave."
     },
     {
+      id: "data",
+      label: "Data",
+      kicker: "Settings safety",
+      title: "Backup, export, and restore",
+      description: "Tools for protecting local Accounting Helpers settings."
+    },
+    {
       id: "about",
       label: "About",
       kicker: "Accounting Helpers",
@@ -206,10 +213,180 @@
         }
         const input = document.querySelector(`[data-setting-path="${CSS.escape(path)}"]`);
         if (input) input.value = value;
-        ah.core.settings.set(path, value);
+        ah.core.settings.set(path, value, { source: "settings-modal" });
         ah.ui.toast.show(`${label} saved.`);
       }
     }, label);
+  }
+
+  async function copyText(text) {
+    if (typeof GM_setClipboard === "function") {
+      try {
+        GM_setClipboard(text, "text");
+        return true;
+      } catch (error) {
+        ah.core.logger?.warn("Settings clipboard copy failed", { method: "GM_setClipboard", error: String(error) });
+      }
+    }
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (error) {
+        ah.core.logger?.warn("Settings clipboard copy failed", { method: "navigator.clipboard", error: String(error) });
+      }
+    }
+    try {
+      const textarea = ah.core.dom.el("textarea", { style: { position: "fixed", left: "-9999px", top: "0" } }, text);
+      document.body.append(textarea);
+      textarea.focus();
+      textarea.select();
+      const ok = document.execCommand?.("copy") || false;
+      textarea.remove();
+      return ok;
+    } catch (error) {
+      ah.core.logger?.warn("Settings clipboard copy failed", { method: "execCommand", error: String(error) });
+      return false;
+    }
+  }
+
+  function downloadJson(filename, payload) {
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = ah.core.dom.el("a", { href: url, download: filename, style: { display: "none" } });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function formatDate(value) {
+    if (!value) return "never";
+    try {
+      return new Date(value).toLocaleString();
+    } catch (_error) {
+      return String(value);
+    }
+  }
+
+  function statusCard(label, value, tone) {
+    const attrs = { class: tone ? `ah-overview-card ah-status-${tone}` : "ah-overview-card" };
+    return ah.core.dom.el("div", attrs, [
+      ah.core.dom.el("strong", {}, label),
+      ah.core.dom.el("span", {}, value || "unknown")
+    ]);
+  }
+
+  function settingsStatusSection() {
+    const status = ah.core.settings.status();
+    const script = status.script || {};
+    const statusGrid = ah.core.dom.el("div", { class: "ah-overview-grid" }, [
+      statusCard("Storage", status.backend, status.backend === "localStorage" ? "warn" : ""),
+      statusCard("Script", `${script.scriptName || "(unknown)"} ${script.scriptVersion || ""}`.trim()),
+      statusCard("Settings", status.settingsExists ? "present" : "missing", status.settingsExists ? "" : "warn"),
+      statusCard("Backup", status.backupExists ? `present; ${formatDate(status.backupSavedAt)}` : "missing", status.backupExists ? "" : "warn"),
+      statusCard("Last saved", formatDate(status.lastSavedAt)),
+      statusCard("Last reset", formatDate(status.lastResetAt)),
+      statusCard("Audit log", `${status.auditLogExists ? "present" : "missing"}; ${status.auditEventCount} events`),
+      statusCard("Last audit event", status.lastAuditAt ? `${formatDate(status.lastAuditAt)} (${status.lastAuditAction || "unknown"})` : "never")
+    ]);
+    const warnings = [];
+    if (status.backend === "localStorage") warnings.push("localStorage fallback is active. Storage is per-site and less reliable than Tampermonkey GM storage.");
+    if (/dev/i.test(script.scriptName || "")) warnings.push("You are running the dev userscript. Release script settings may be separate; export settings before switching scripts.");
+    const warningNode = warnings.length ?
+      ah.core.dom.el("div", { class: "ah-settings-warning" }, warnings.map((item) => ah.core.dom.el("div", {}, item))) :
+      null;
+    return section("Current settings status", [statusGrid, warningNode], "Use this when settings appear to reset or when switching between dev and release scripts.");
+  }
+
+  function settingsExportSection() {
+    return section("Export settings", [
+      ah.core.dom.el("div", { class: "ah-settings-data-tools" }, [
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button",
+          title: "Copy a JSON export of current settings.",
+          onclick: async () => {
+            const payload = JSON.stringify(ah.core.settings.exportSettings("settings-modal"), null, 2);
+            const ok = await copyText(payload);
+            ah.ui.toast.show(ok ? "Settings JSON copied." : "Could not copy settings JSON.", { tone: ok ? "success" : "warn" });
+          }
+        }, "Copy settings JSON"),
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button ah-button-secondary",
+          title: "Download a JSON export of current settings.",
+          onclick: () => {
+            const payload = JSON.stringify(ah.core.settings.exportSettings("settings-modal"), null, 2);
+            downloadJson(`accounting-helpers-settings-${new Date().toISOString().slice(0, 10)}.json`, payload);
+            ah.ui.toast.show("Settings export downloaded.");
+          }
+        }, "Download settings JSON")
+      ])
+    ], "Exports include script metadata, storage backend, timestamp, and settings.");
+  }
+
+  function settingsImportSection() {
+    const textarea = ah.core.dom.el("textarea", {
+      class: "ah-settings-import",
+      rows: "8",
+      placeholder: "Paste Accounting Helpers settings JSON here."
+    });
+    return section("Import settings", [
+      ah.core.dom.el("div", { class: "ah-settings-data-tools ah-settings-data-stack" }, [
+        textarea,
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button",
+          title: "Validate and import pasted settings JSON.",
+          onclick: () => {
+            let imported = null;
+            try {
+              imported = ah.core.settings.settingsFromImport(textarea.value);
+            } catch (error) {
+              ah.ui.toast.show(error.message || "Settings import JSON is invalid.", { title: "Import failed", tone: "error" });
+              return;
+            }
+            if (!confirm("Import these Accounting Helpers settings and overwrite current settings? A backup will be written first.")) return;
+            const ok = ah.core.settings.importSettings({ settings: imported }, { source: "settings-modal" });
+            ah.ui.toast.show(ok ? "Settings imported." : "Settings import failed.", { tone: ok ? "success" : "error" });
+            if (ok) {
+              close();
+              open("data");
+            }
+          }
+        }, "Import settings JSON")
+      ])
+    ], "Invalid JSON or unrelated data is rejected before anything is overwritten.");
+  }
+
+  function restoreBackupSection() {
+    const backup = ah.core.settings.backup();
+    const label = backup?.savedAt ? `Restore last backup (${formatDate(backup.savedAt)})` : "Restore last backup";
+    const attrs = {
+      type: "button",
+      class: "ah-button ah-button-secondary",
+      title: backup ? "Restore settings from the latest automatic backup." : "No settings backup is currently stored.",
+      onclick: () => {
+        if (!backup) {
+          ah.ui.toast.show("No settings backup is available.", { tone: "warn" });
+          return;
+        }
+        if (!confirm("Restore the last Accounting Helpers settings backup and overwrite current settings?")) return;
+        const ok = ah.core.settings.restoreBackup({ source: "settings-modal" });
+        ah.ui.toast.show(ok ? "Settings restored from backup." : "Settings restore failed.", { tone: ok ? "success" : "error" });
+        if (ok) {
+          close();
+          open("data");
+        }
+      }
+    };
+    if (!backup) attrs.disabled = "disabled";
+    return section("Restore backup", [
+      ah.core.dom.el("div", { class: "ah-settings-data-tools" }, [
+        ah.core.dom.el("button", attrs, label)
+      ])
+    ], backup ? "Restoring uses the normal save path and writes a fresh backup and audit event." : "A backup is written automatically after each successful settings save.");
   }
 
   function captureSection() {
@@ -305,6 +482,15 @@
       if (capture) panel.append(capture);
     }
 
+    if (tab.id === "data") {
+      panel.append(
+        settingsStatusSection(),
+        restoreBackupSection(),
+        settingsExportSection(),
+        settingsImportSection()
+      );
+    }
+
     if (tab.id === "about") {
       panel.append(
         section("Overview", [
@@ -345,7 +531,8 @@
     );
   }
 
-  function open() {
+  function open(initialTab) {
+    const startingTab = typeof initialTab === "string" ? initialTab : "general";
     ah.ui.styles.ensureStyles();
     document.getElementById("ah-settings-modal")?.remove();
 
@@ -386,10 +573,10 @@
         class: "ah-button ah-button-secondary",
         title: "Clear all Accounting Helpers settings stored by Tampermonkey.",
         onclick: () => {
-          if (confirm("Reset Accounting Helpers settings?")) {
-            ah.core.settings.reset();
+          if (confirm("Reset Accounting Helpers settings to defaults? The last backup and audit log will be kept so settings can still be restored.")) {
+            ah.core.settings.reset({ source: "settings-modal" });
             close();
-            ah.ui.toast.show("Settings reset.", { title: "Settings reset" });
+            ah.ui.toast.show("Settings reset. Last backup was kept.", { title: "Settings reset", tone: "warn" });
           }
         }
       }, "Reset"),
@@ -412,7 +599,7 @@
         });
         current[parts.at(-1)] = value;
       });
-      ah.core.settings.save(next);
+      ah.core.settings.save(next, { source: "settings-modal" });
       close();
       ah.ui.toast.show("Settings saved.", { title: "Settings saved" });
     });
@@ -423,7 +610,7 @@
       if (event.target === backdrop) close();
     });
     document.body.append(backdrop);
-    activateTab(modal, "general");
+    activateTab(modal, startingTab);
   }
 
   function close() {

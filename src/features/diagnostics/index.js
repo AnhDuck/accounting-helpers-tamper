@@ -54,6 +54,7 @@
   }
 
   function storageBackend() {
+    if (typeof ah.core.storage?.backend === "function") return ah.core.storage.backend();
     const gm = gmAvailable();
     if (gm.get && gm.set) return "GM";
     if (typeof localStorage === "object") return "localStorage";
@@ -61,6 +62,7 @@
   }
 
   function keyExists(key) {
+    if (typeof ah.core.storage?.has === "function") return ah.core.storage.has(key);
     const sentinel = { __accountingHelpersMissing: true };
     return ah.core.storage.get(key, sentinel) !== sentinel;
   }
@@ -77,6 +79,8 @@
         backupExists: keyExists(keys.settingsBackup),
         auditLogKey: keys.settingsAuditLog,
         auditLogExists: keyExists(keys.settingsAuditLog),
+        metaKey: keys.settingsMeta,
+        metaExists: keyExists(keys.settingsMeta),
         pendingPayloadKey: keys.aliPendingPayload,
         pendingPayloadExists: keyExists(keys.aliPendingPayload)
       },
@@ -86,6 +90,8 @@
 
   function settingsDiagnostics() {
     const settings = ah.core.settings.all();
+    const status = ah.core.settings.status?.() || {};
+    const audit = ah.core.settings.getAuditLog?.() || [];
     return {
       exists: keyExists(ah.core.constants.storageKeys.settings),
       hasDefaultVendor: !!settings.wave?.defaultAliExpressVendor,
@@ -94,7 +100,23 @@
       defaultType: settings.wave?.defaultAliExpressType || "",
       autoCreateWithdrawal: !!settings.aliToWave?.autoCreateWithdrawal,
       autoFillPending: !!settings.aliToWave?.autoFillPending,
-      allowReimport: !!settings.aliToWave?.allowReimport
+      allowReimport: !!settings.aliToWave?.allowReimport,
+      backupExists: !!status.backupExists,
+      backupSavedAt: status.backupSavedAt || "",
+      auditLogExists: !!status.auditLogExists,
+      auditEventCount: status.auditEventCount || 0,
+      lastSavedAt: status.lastSavedAt || "",
+      lastResetAt: status.lastResetAt || "",
+      lastAuditAt: status.lastAuditAt || "",
+      lastAuditAction: status.lastAuditAction || "",
+      recentAuditEvents: audit.slice(-10).map((event) => ({
+        at: event.at,
+        action: event.action,
+        source: event.source,
+        backend: event.backend,
+        settingsExists: event.settingsExists,
+        backupExists: event.backupExists
+      }))
     };
   }
 
@@ -383,7 +405,7 @@
     const preflight = report.aliToWave?.preflight;
     const lines = [
       `Script: ${report.script.name || "(unknown)"} ${report.script.version || ""} (${report.script.mode})`,
-      `Storage: ${report.storage.backend}; settings ${report.settings.exists ? "exist" : "missing"}; backup ${report.storage.keys.backupExists ? "exists" : "missing"}`,
+      `Storage: ${report.storage.backend}; settings ${report.settings.exists ? "exist" : "missing"}; backup ${report.storage.keys.backupExists ? "exists" : "missing"}; audit ${report.storage.keys.auditLogExists ? "exists" : "missing"}`,
       `Pending payload: ${pending.exists ? "yes" : "no"}${pending.exists ? `; valid ${pending.valid ? "yes" : "no"}; ${pending.currency} ${pending.amount}; order ${pending.orderId}` : ""}`,
       `Wave: heartbeat ${wave.heartbeatRecent ? "recent" : "not recent"}; modal ${wave.modalOpen ? "open" : "not open"}; dropdowns ${wave.dropdowns.openCount}`,
       `Ready to fill: ${preflight ? (preflight.ok ? "yes" : "no") : "no pending payload"}`

@@ -228,7 +228,7 @@
     const checkbox = ah.core.dom.el("input", { type: "checkbox", "data-ah-auto-update": "1" });
     checkbox.checked = ah.core.settings.get("wave.autoUpdateTaxPopover", false);
     checkbox.addEventListener("change", () => {
-      ah.core.settings.set("wave.autoUpdateTaxPopover", checkbox.checked);
+      ah.core.settings.set("wave.autoUpdateTaxPopover", checkbox.checked, { source: "settings-modal" });
       ah.ui.toast.show(`Auto Update ${checkbox.checked ? "ON" : "OFF"}.`);
     });
     panel.append(ah.core.dom.el("label", { class: "ah-check", style: "white-space:nowrap;" }, [checkbox, "Auto Update"]));
