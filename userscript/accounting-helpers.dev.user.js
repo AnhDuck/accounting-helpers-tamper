@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers Dev
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.11-dev
+// @version      0.1.13-dev
 // @description  Runtime loader for local Accounting Helpers modules.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -26,7 +26,7 @@
 
 (function () {
   const devOrigin = "http://127.0.0.1:5173";
-  const manifestUrl = devOrigin + "/accounting-helpers.modules.json";
+  const runtimeUrl = devOrigin + "/accounting-helpers.dev-runtime.js";
 
   function withCacheBust(url) {
     return url + (url.includes("?") ? "&" : "?") + "t=" + Date.now();
@@ -56,10 +56,10 @@
     });
   }
 
-  function showLoadFailure(error) {
-    console.error("[Accounting Helpers Dev] Failed to load local modules", error);
+  function showBootstrapFailure(error) {
+    console.error("[Accounting Helpers Dev] Failed to load local runtime", error);
     const box = document.createElement("div");
-    box.textContent = "Accounting Helpers Dev failed to load from " + devOrigin + ": " + error.message;
+    box.textContent = "Accounting Helpers Dev failed to load runtime from " + devOrigin + ": " + error.message;
     box.style.cssText = [
       "position:fixed",
       "z-index:2147483647",
@@ -76,20 +76,11 @@
     document.documentElement.appendChild(box);
   }
 
-  async function loadLocalModules() {
-    const manifest = JSON.parse(await requestText(manifestUrl));
-    if (!manifest || !Array.isArray(manifest.files)) {
-      throw new Error("Invalid module manifest from " + manifestUrl);
-    }
-
-    for (const file of manifest.files) {
-      const url = devOrigin + "/" + file;
-      const source = await requestText(url);
-      new Function(source + "\n//# sourceURL=" + url)();
-    }
-
-    console.info("[Accounting Helpers Dev] Loaded " + manifest.files.length + " local modules from " + devOrigin);
+  async function loadRuntime() {
+    window.AccountingHelpersDev = Object.assign({}, window.AccountingHelpersDev, { origin: devOrigin });
+    const source = await requestText(runtimeUrl);
+    new Function(source + "\n//# sourceURL=" + runtimeUrl)();
   }
 
-  loadLocalModules().catch(showLoadFailure);
+  loadRuntime().catch(showBootstrapFailure);
 })();

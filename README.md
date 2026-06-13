@@ -48,11 +48,10 @@ dist/accounting-helpers.user.js
 
 ## Development Loader
 
-Build once, then start the local dev server:
+To start or restart the local dev server manually:
 
 ```powershell
-node tools/build-release.js
-node tools/dev-server.js
+.\start-dev-server.bat
 ```
 
 Install the dev userscript from:
@@ -61,19 +60,35 @@ Install the dev userscript from:
 http://127.0.0.1:5173/userscript/accounting-helpers.dev.user.js
 ```
 
-The installed dev userscript fetches its module list from:
+The installed dev userscript is a stable bootstrap. It loads the changeable dev runtime from:
+
+```text
+http://127.0.0.1:5173/accounting-helpers.dev-runtime.js
+```
+
+That runtime loads one live bundle from:
+
+```text
+http://127.0.0.1:5173/accounting-helpers.dev-bundle.js
+```
+
+The dev server generates that bundle from the current source files on each request. The ordered module manifest is also available for diagnostics at:
 
 ```text
 http://127.0.0.1:5173/accounting-helpers.modules.json
 ```
 
-Then it loads current source files from:
+Refresh the Wave or AliExpress page after editing source files. Normal code edits do not require reinstalling the Tampermonkey script while `tools/dev-server.js` is running. When adding, removing, or reordering modules, update `sourceFiles` in `tools/build-release.js` and rerun the build.
 
-```text
-http://127.0.0.1:5173/src/...
+Agent validation should use:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/restart-dev-server.ps1
 ```
 
-Refresh the Wave or AliExpress page after editing source files. Normal code edits do not require reinstalling the Tampermonkey script while `tools/dev-server.js` is running. When adding, removing, or reordering modules, update `sourceFiles` in `tools/build-release.js` and rerun the build.
+That command stops any stale dev server, rebuilds the generated userscripts, starts the server in the background, and checks `http://127.0.0.1:5173/health`.
+
+Tampermonkey limitation: agents cannot directly edit the installed Tampermonkey script. To avoid that problem, keep the installed dev userscript as a stable bootstrap and put future loader changes in `tools/dev-runtime.js`. Metadata changes such as new `@match`, `@grant`, or `@connect` entries still require a one-time Tampermonkey update by the user.
 
 ## Debug
 

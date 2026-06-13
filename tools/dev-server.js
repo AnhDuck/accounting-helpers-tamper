@@ -36,6 +36,15 @@ function currentSourceFiles() {
   return require("./build-release").sourceFiles;
 }
 
+function currentSourceBundle() {
+  return currentSourceFiles()
+    .map((file) => {
+      const fullPath = path.join(root, file);
+      return `\n/* ${file} */\n${fs.readFileSync(fullPath, "utf8").trim()}\n`;
+    })
+    .join("\n");
+}
+
 function isAllowedPath(relativePath) {
   const normalized = relativePath.replace(/\\/g, "/");
   return allowedRoots.some((prefix) => normalized === prefix || normalized.startsWith(prefix + "/"));
@@ -61,6 +70,16 @@ function handleRequest(request, response) {
 
   if (url.pathname === "/accounting-helpers.modules.json") {
     send(response, 200, "application/json; charset=utf-8", `${JSON.stringify({ files: currentSourceFiles() }, null, 2)}\n`);
+    return;
+  }
+
+  if (url.pathname === "/accounting-helpers.dev-bundle.js") {
+    send(response, 200, "text/javascript; charset=utf-8", currentSourceBundle());
+    return;
+  }
+
+  if (url.pathname === "/accounting-helpers.dev-runtime.js") {
+    send(response, 200, "text/javascript; charset=utf-8", fs.readFileSync(path.join(root, "tools", "dev-runtime.js"), "utf8"));
     return;
   }
 
