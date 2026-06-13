@@ -156,6 +156,18 @@
     }
   }
 
+  async function applyBothForWrapper(wrapper) {
+    if (!wrapper) throw new Error("wrapper missing");
+    const gst = await ensureTaxPresent(wrapper, TAX_GST);
+    await sleep(350);
+    const pst = await ensureTaxPresent(wrapper, TAX_PST);
+    if (!gst || !pst) return false;
+    ah.features.waveSavingsDashboard.addClicks(6, "COMBO");
+    await sleep(120);
+    clickUpdateIfEnabled();
+    return true;
+  }
+
   async function applyBoth(event) {
     if (busy) {
       ah.ui.toast.show("Wave helper is busy.", { tone: "warn" });
@@ -166,23 +178,37 @@
     button.disabled = true;
     try {
       const wrapper = findWrapperForButton(button);
-      if (!wrapper) throw new Error("wrapper missing");
-      const gst = await ensureTaxPresent(wrapper, TAX_GST);
-      await sleep(350);
-      const pst = await ensureTaxPresent(wrapper, TAX_PST);
-      if (!gst || !pst) {
+      const ok = await applyBothForWrapper(wrapper);
+      if (!ok) {
         ah.ui.toast.show("Failed to apply GST + PST.", { tone: "warn" });
         return;
       }
-      ah.features.waveSavingsDashboard.addClicks(6, "COMBO");
       ah.ui.toast.show("Applied GST + PST.");
-      await sleep(120);
-      clickUpdateIfEnabled();
     } catch (error) {
       ah.core.logger.error("Tax combo failed", String(error));
       ah.ui.toast.show("Error applying GST + PST.", { tone: "error" });
     } finally {
       button.disabled = false;
+      busy = false;
+    }
+  }
+
+  async function applyBothInOpenTransaction() {
+    if (busy) {
+      return { ok: false, attempted: false, reason: "Wave helper is busy." };
+    }
+    busy = true;
+    try {
+      const modal = ah.sites.wave.transactionModal.findOpenModal();
+      const wrapper = modal && ah.core.dom.qsa(".anchor-transaction__line-item--singleline__btn-wrapper", modal)
+        .find((item) => ah.core.dom.qsa("button.transaction-tax-liability__popover-toggle", item)
+          .some((button) => textIncludes(button, "Include sales tax") || textIncludes(button, "Edit")));
+      const ok = await applyBothForWrapper(wrapper);
+      return { ok, attempted: true, reason: ok ? "" : "tax controls not found or tax option missing" };
+    } catch (error) {
+      ah.core.logger.error("Tax combo failed", String(error));
+      return { ok: false, attempted: true, reason: String(error) };
+    } finally {
       busy = false;
     }
   }
@@ -248,4 +274,5 @@
   }
 
   ah.features.waveTaxButtons.ensure = ensure;
+  ah.features.waveTaxButtons.applyBothInOpenTransaction = applyBothInOpenTransaction;
 })();

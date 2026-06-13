@@ -113,6 +113,42 @@
     return currentIndex === 0 ? accounts[1] : accounts[0];
   }
 
+  function choosePreferredTarget(current) {
+    const imported = ah.core.settings.get("wave.accounts.amex", "");
+    const preferred = ah.core.settings.get("wave.accounts.creditCard", "");
+    if (!imported || !preferred) return "";
+    const currentLower = String(current || "").toLowerCase();
+    const importedLower = imported.toLowerCase();
+    const preferredLower = preferred.toLowerCase();
+    if (currentLower === preferredLower || currentLower.includes(preferredLower) || preferredLower.includes(currentLower)) return "";
+    if (currentLower === importedLower || currentLower.includes(importedLower) || importedLower.includes(currentLower)) return preferred;
+    return "";
+  }
+
+  async function switchToPreferred(root) {
+    const dropdown = findAccountDropdown(root || ah.sites.wave.transactionModal.findOpenModal() || document);
+    const current = getCurrentAccount(dropdown);
+    const target = choosePreferredTarget(current);
+    if (!dropdown || !target) {
+      return {
+        attempted: false,
+        ok: true,
+        reason: target ? "account dropdown not found" : "already preferred or settings incomplete",
+        current,
+        target
+      };
+    }
+    const ok = await switchDirect(dropdown, target);
+    if (ok) ah.features.waveSavingsDashboard.addClicks(3, "ACCOUNT_SWITCH");
+    return {
+      attempted: true,
+      ok,
+      reason: ok ? "" : "preferred account option not found",
+      current,
+      target
+    };
+  }
+
   async function onSwitch(event) {
     if (busy) return;
     busy = true;
@@ -163,4 +199,5 @@
   }
 
   ah.features.waveAccountSwitcher.ensure = ensure;
+  ah.features.waveAccountSwitcher.switchToPreferred = switchToPreferred;
 })();

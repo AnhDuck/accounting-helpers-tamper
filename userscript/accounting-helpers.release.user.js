@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.23
+// @version      0.1.24
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -36,7 +36,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.23",
+    version: "0.1.24",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -1208,24 +1208,78 @@
         width: 100%;
       }
       .ah-amz-order-row .ah-button { min-height: 30px; }
+      .ah-amz-open-invoice {
+        background: #dcf7e7;
+        border-color: #8bc7a0;
+        color: #17442a;
+      }
+      .ah-amz-open-invoice:hover { background: #c9f0da; }
+      .ah-amz-download-invoice {
+        background: #fde2e2;
+        border-color: #e5a1a1;
+        color: #6f1d1d;
+      }
+      .ah-amz-download-invoice:hover { background: #fbd0d0; }
       .ah-amazon-to-wave-modal-actions {
-        align-items: center;
+        align-items: start;
         background: #f6fafb;
         border: 1px solid #b9c7cc;
         border-radius: 6px;
         color: #182f36;
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
         gap: 8px;
+        grid-template-columns: minmax(0, 1fr) auto;
         margin: 0 0 12px;
         padding: 10px;
       }
-      .ah-amazon-to-wave-modal-actions strong { font-size: 13px; margin-right: 4px; }
-      .ah-amazon-to-wave-modal-actions span { color: #3d5961; font-weight: 600; }
-      .ah-amazon-to-wave-modal-actions .ah-help {
-        flex: 1 1 220px;
+      .ah-amz-pending-card { display: grid; gap: 8px; }
+      .ah-amz-pending-summary {
+        display: grid;
+        gap: 4px;
         min-width: 0;
+      }
+      .ah-amz-pending-kicker {
+        color: #47616a;
+        font: 750 11px/1.2 system-ui, sans-serif;
+        text-transform: uppercase;
+      }
+      .ah-amz-pending-main {
+        align-items: baseline;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .ah-amz-pending-main strong {
+        color: #142f37;
+        font: 800 14px/1.25 system-ui, sans-serif;
+      }
+      .ah-amz-pending-amount {
+        color: #294c55;
+        font: 800 14px/1.25 system-ui, sans-serif;
+      }
+      .ah-amz-pending-product {
+        color: #3f5961;
+        font: 12px/1.35 system-ui, sans-serif;
         overflow-wrap: anywhere;
+      }
+      .ah-amz-pending-actions {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .ah-amazon-to-wave-modal-actions .ah-amz-pending-actions {
+        justify-content: flex-end;
+        min-width: 360px;
+      }
+      @media (max-width: 760px) {
+        .ah-amazon-to-wave-modal-actions {
+          grid-template-columns: 1fr;
+        }
+        .ah-amazon-to-wave-modal-actions .ah-amz-pending-actions {
+          justify-content: flex-start;
+          min-width: 0;
+        }
       }
       #ah-diagnostics-panel {
         bottom: var(--ah-dev-status-offset, 84px);
@@ -3467,6 +3521,18 @@
     }
   }
 
+  async function applyBothForWrapper(wrapper) {
+    if (!wrapper) throw new Error("wrapper missing");
+    const gst = await ensureTaxPresent(wrapper, TAX_GST);
+    await sleep(350);
+    const pst = await ensureTaxPresent(wrapper, TAX_PST);
+    if (!gst || !pst) return false;
+    ah.features.waveSavingsDashboard.addClicks(6, "COMBO");
+    await sleep(120);
+    clickUpdateIfEnabled();
+    return true;
+  }
+
   async function applyBoth(event) {
     if (busy) {
       ah.ui.toast.show("Wave helper is busy.", { tone: "warn" });
@@ -3477,23 +3543,37 @@
     button.disabled = true;
     try {
       const wrapper = findWrapperForButton(button);
-      if (!wrapper) throw new Error("wrapper missing");
-      const gst = await ensureTaxPresent(wrapper, TAX_GST);
-      await sleep(350);
-      const pst = await ensureTaxPresent(wrapper, TAX_PST);
-      if (!gst || !pst) {
+      const ok = await applyBothForWrapper(wrapper);
+      if (!ok) {
         ah.ui.toast.show("Failed to apply GST + PST.", { tone: "warn" });
         return;
       }
-      ah.features.waveSavingsDashboard.addClicks(6, "COMBO");
       ah.ui.toast.show("Applied GST + PST.");
-      await sleep(120);
-      clickUpdateIfEnabled();
     } catch (error) {
       ah.core.logger.error("Tax combo failed", String(error));
       ah.ui.toast.show("Error applying GST + PST.", { tone: "error" });
     } finally {
       button.disabled = false;
+      busy = false;
+    }
+  }
+
+  async function applyBothInOpenTransaction() {
+    if (busy) {
+      return { ok: false, attempted: false, reason: "Wave helper is busy." };
+    }
+    busy = true;
+    try {
+      const modal = ah.sites.wave.transactionModal.findOpenModal();
+      const wrapper = modal && ah.core.dom.qsa(".anchor-transaction__line-item--singleline__btn-wrapper", modal)
+        .find((item) => ah.core.dom.qsa("button.transaction-tax-liability__popover-toggle", item)
+          .some((button) => textIncludes(button, "Include sales tax") || textIncludes(button, "Edit")));
+      const ok = await applyBothForWrapper(wrapper);
+      return { ok, attempted: true, reason: ok ? "" : "tax controls not found or tax option missing" };
+    } catch (error) {
+      ah.core.logger.error("Tax combo failed", String(error));
+      return { ok: false, attempted: true, reason: String(error) };
+    } finally {
       busy = false;
     }
   }
@@ -3559,6 +3639,7 @@
   }
 
   ah.features.waveTaxButtons.ensure = ensure;
+  ah.features.waveTaxButtons.applyBothInOpenTransaction = applyBothInOpenTransaction;
 })();
 
 
@@ -3678,6 +3759,42 @@
     return currentIndex === 0 ? accounts[1] : accounts[0];
   }
 
+  function choosePreferredTarget(current) {
+    const imported = ah.core.settings.get("wave.accounts.amex", "");
+    const preferred = ah.core.settings.get("wave.accounts.creditCard", "");
+    if (!imported || !preferred) return "";
+    const currentLower = String(current || "").toLowerCase();
+    const importedLower = imported.toLowerCase();
+    const preferredLower = preferred.toLowerCase();
+    if (currentLower === preferredLower || currentLower.includes(preferredLower) || preferredLower.includes(currentLower)) return "";
+    if (currentLower === importedLower || currentLower.includes(importedLower) || importedLower.includes(currentLower)) return preferred;
+    return "";
+  }
+
+  async function switchToPreferred(root) {
+    const dropdown = findAccountDropdown(root || ah.sites.wave.transactionModal.findOpenModal() || document);
+    const current = getCurrentAccount(dropdown);
+    const target = choosePreferredTarget(current);
+    if (!dropdown || !target) {
+      return {
+        attempted: false,
+        ok: true,
+        reason: target ? "account dropdown not found" : "already preferred or settings incomplete",
+        current,
+        target
+      };
+    }
+    const ok = await switchDirect(dropdown, target);
+    if (ok) ah.features.waveSavingsDashboard.addClicks(3, "ACCOUNT_SWITCH");
+    return {
+      attempted: true,
+      ok,
+      reason: ok ? "" : "preferred account option not found",
+      current,
+      target
+    };
+  }
+
   async function onSwitch(event) {
     if (busy) return;
     busy = true;
@@ -3728,6 +3845,7 @@
   }
 
   ah.features.waveAccountSwitcher.ensure = ensure;
+  ah.features.waveAccountSwitcher.switchToPreferred = switchToPreferred;
 })();
 
 
@@ -4773,7 +4891,7 @@
     return next;
   }
 
-  async function applyIntoOpenTransaction(payload) {
+  async function applyIntoOpenTransaction(payload, options) {
     const modal = ah.sites.wave.transactionModal.findOpenModal();
     if (!modal) {
       const result = recordLastApplyResult({
@@ -4810,19 +4928,31 @@
     const nextDescription = formatDescription(existing, payload);
     const changed = nextDescription !== existing;
     const ok = changed ? ah.core.react.setFieldValue(descriptionField, nextDescription) : true;
+    const accountResult = await ah.features.waveAccountSwitcher.switchToPreferred?.(modal);
+    const taxResult = options?.applyTaxes ?
+      await ah.features.waveTaxButtons.applyBothInOpenTransaction?.() :
+      null;
     const warning = amountWarning(payload);
+    const warnings = [];
+    if (warning) warnings.push(warning);
+    if (accountResult?.attempted && !accountResult.ok) warnings.push(`Preferred account was not selected: ${accountResult.reason}`);
+    if (taxResult && !taxResult.ok) warnings.push(`GST + PST was not applied: ${taxResult.reason}`);
+    const filled = [];
+    if (changed) filled.push("description");
+    if (accountResult?.attempted && accountResult.ok) filled.push("account");
+    if (taxResult?.ok) filled.push("GST + PST");
     const result = recordLastApplyResult({
       ok,
       complete: ok,
       orderId: payload.orderId,
-      filled: changed ? ["description"] : [],
+      filled,
       skipped: changed ? [] : ["description already contains Amazon details"],
-      warnings: warning ? [warning] : [],
+      warnings,
       modalStillOpen: !!ah.sites.wave.transactionModal.findOpenModal(),
       saved: false,
-      message: warning || (changed ? `Applied Amazon details for ${payload.orderId}. Review and save manually.` : "Amazon details were already present. Review and save manually.")
+      message: warnings[0] || (options?.applyTaxes ? "Applied Amazon details and GST + PST. Review and save manually." : `Applied Amazon details for ${payload.orderId}. Review and save manually.`)
     });
-    ah.ui.toast.show(result.message, { tone: warning ? "warn" : "success" });
+    ah.ui.toast.show(result.message, { tone: warnings.length ? "warn" : "success" });
     return result;
   }
 
@@ -4839,11 +4969,14 @@
   function renderPayloadSummary(payload) {
     const amount = ah.core.money.formatCurrency(payload.amount.value, payload.amount.currency);
     const title = primaryTitle(payload);
-    return [
-      ah.core.dom.el("strong", {}, `Pending Amazon order: ${payload.orderId}`),
-      ah.core.dom.el("span", {}, amount),
-      ah.core.dom.el("span", { class: "ah-help" }, title ? `Product: ${title}` : "Open the matching imported transaction.")
-    ];
+    return ah.core.dom.el("div", { class: "ah-amz-pending-summary" }, [
+      ah.core.dom.el("div", { class: "ah-amz-pending-kicker" }, "Pending Amazon order"),
+      ah.core.dom.el("div", { class: "ah-amz-pending-main" }, [
+        ah.core.dom.el("strong", {}, payload.orderId),
+        ah.core.dom.el("span", { class: "ah-amz-pending-amount" }, amount)
+      ]),
+      ah.core.dom.el("div", { class: "ah-amz-pending-product" }, title || "Open the matching imported transaction.")
+    ]);
   }
 
   function renderModalActions(payload) {
@@ -4853,19 +4986,28 @@
       "data-ah-amount": payload.amount.value,
       "data-ah-currency": payload.amount.currency
     }, [
-      ...renderPayloadSummary(payload),
-      ah.core.dom.el("button", {
-        type: "button",
-        class: "ah-button",
-        title: "Append the staged Amazon product details to this Wave transaction description without saving.",
-        onclick: () => applyIntoOpenTransaction(payload)
-      }, "Apply Amazon details"),
-      ah.core.dom.el("button", {
-        type: "button",
-        class: "ah-button ah-button-secondary",
-        title: "Remove this staged Amazon order.",
-        onclick: clearPendingPayload
-      }, "Clear")
+      renderPayloadSummary(payload),
+      ah.core.dom.el("div", { class: "ah-amz-pending-actions" }, [
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button",
+          title: "Append Amazon product details and select the preferred card account when the imported card account is visible.",
+          onclick: () => applyIntoOpenTransaction(payload)
+        }, "Apply Amazon details"),
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button",
+          style: "background:#b43232;border-color:#922929;",
+          title: "Apply Amazon details, select the preferred card account when needed, and apply GST + PST. Use after checking the invoice includes both taxes.",
+          onclick: () => applyIntoOpenTransaction(payload, { applyTaxes: true })
+        }, "Apply details + GST/PST"),
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button ah-button-secondary",
+          title: "Remove this staged Amazon order.",
+          onclick: clearPendingPayload
+        }, "Clear")
+      ])
     ]);
   }
 
@@ -4887,10 +5029,10 @@
   }
 
   function renderBanner(payload) {
-    return ah.core.dom.el("div", {}, [
-      ...renderPayloadSummary(payload),
+    return ah.core.dom.el("div", { class: "ah-amz-pending-card" }, [
+      renderPayloadSummary(payload),
       ah.core.dom.el("div", { class: "ah-help", style: "margin-top:6px;" }, "Open the matching imported Amazon transaction in Wave, then click Apply Amazon details."),
-      ah.core.dom.el("div", { class: "ah-pill-row" }, [
+      ah.core.dom.el("div", { class: "ah-amz-pending-actions" }, [
         ah.core.dom.el("button", {
           type: "button",
           class: "ah-button ah-button-secondary",

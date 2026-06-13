@@ -394,24 +394,78 @@
         width: 100%;
       }
       .ah-amz-order-row .ah-button { min-height: 30px; }
+      .ah-amz-open-invoice {
+        background: #dcf7e7;
+        border-color: #8bc7a0;
+        color: #17442a;
+      }
+      .ah-amz-open-invoice:hover { background: #c9f0da; }
+      .ah-amz-download-invoice {
+        background: #fde2e2;
+        border-color: #e5a1a1;
+        color: #6f1d1d;
+      }
+      .ah-amz-download-invoice:hover { background: #fbd0d0; }
       .ah-amazon-to-wave-modal-actions {
-        align-items: center;
+        align-items: start;
         background: #f6fafb;
         border: 1px solid #b9c7cc;
         border-radius: 6px;
         color: #182f36;
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
         gap: 8px;
+        grid-template-columns: minmax(0, 1fr) auto;
         margin: 0 0 12px;
         padding: 10px;
       }
-      .ah-amazon-to-wave-modal-actions strong { font-size: 13px; margin-right: 4px; }
-      .ah-amazon-to-wave-modal-actions span { color: #3d5961; font-weight: 600; }
-      .ah-amazon-to-wave-modal-actions .ah-help {
-        flex: 1 1 220px;
+      .ah-amz-pending-card { display: grid; gap: 8px; }
+      .ah-amz-pending-summary {
+        display: grid;
+        gap: 4px;
         min-width: 0;
+      }
+      .ah-amz-pending-kicker {
+        color: #47616a;
+        font: 750 11px/1.2 system-ui, sans-serif;
+        text-transform: uppercase;
+      }
+      .ah-amz-pending-main {
+        align-items: baseline;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .ah-amz-pending-main strong {
+        color: #142f37;
+        font: 800 14px/1.25 system-ui, sans-serif;
+      }
+      .ah-amz-pending-amount {
+        color: #294c55;
+        font: 800 14px/1.25 system-ui, sans-serif;
+      }
+      .ah-amz-pending-product {
+        color: #3f5961;
+        font: 12px/1.35 system-ui, sans-serif;
         overflow-wrap: anywhere;
+      }
+      .ah-amz-pending-actions {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .ah-amazon-to-wave-modal-actions .ah-amz-pending-actions {
+        justify-content: flex-end;
+        min-width: 360px;
+      }
+      @media (max-width: 760px) {
+        .ah-amazon-to-wave-modal-actions {
+          grid-template-columns: 1fr;
+        }
+        .ah-amazon-to-wave-modal-actions .ah-amz-pending-actions {
+          justify-content: flex-start;
+          min-width: 0;
+        }
       }
       #ah-diagnostics-panel {
         bottom: var(--ah-dev-status-offset, 84px);

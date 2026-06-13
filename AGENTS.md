@@ -24,8 +24,10 @@ Rules:
 Browser/tooling rules for agents:
 
 - Do not use the Codex in-app browser for Tampermonkey validation. It does not run the user's installed Tampermonkey scripts, grants, or GM storage, so it cannot validate this app's real runtime behavior.
-- Use the user's existing Chrome tab for Wave or AliExpress validation because the installed Tampermonkey dev/release userscript, logged-in site state, and GM storage live there.
-- After refreshing Wave or AliExpress, do not immediately assume the helper UI is missing. The host app often finishes navigation before the dev runtime has loaded and injected the helper UI.
+- For UI, selector, settings, diagnostics, or user-facing behavior changes, validate in the user's existing Chrome tab by default unless the user explicitly says not to, the relevant site is unavailable, or another rule in this file forbids the validation path. Do not wait for the user to ask for validation.
+- Use the user's existing Chrome tab for Wave, Amazon, or AliExpress validation because the installed Tampermonkey dev/release userscript, logged-in site state, and GM storage live there.
+- Do not treat an AliExpress automation block, CAPTCHA, or login wall as a code failure. If AliExpress validation is blocked, report the block and validate the Wave-side diagnostics/fake-payload workflow instead.
+- After refreshing Wave, Amazon, or AliExpress, do not immediately assume the helper UI is missing. The host app often finishes navigation before the dev runtime has loaded and injected the helper UI.
 - After a refresh, wait until one of these readiness signals appears before running diagnostics or interacting with helper controls:
   - `document.documentElement.dataset.accountingHelpersReadyVersion` equals the expected app version.
   - `document.documentElement.dataset.accountingHelpersReadyAt` is present.
@@ -38,7 +40,7 @@ Validation checklist for agents:
 2. Run `node tools/build-release.js` after source-module, metadata, settings, UI, or behavior changes.
 3. Confirm `http://127.0.0.1:5173/accounting-helpers.dev-status.json` reports the expected app and bootstrap versions.
 4. Restart the dev server only if the status check fails or reports stale/wrong server state.
-5. Refresh the relevant Wave or AliExpress tab and verify the changed UI/behavior.
+5. Refresh the relevant Wave, Amazon, or AliExpress tab and verify the changed UI/behavior in Chrome unless blocked or explicitly waived.
 6. After refresh, wait for the helper readiness signal before clicking `Diagnostics/Test` or checking UI. Wave can render its own app shell before Tampermonkey finishes injecting this userscript.
 
 Diagnostics/Test quick workflow for agents:

@@ -54,7 +54,7 @@
     return next;
   }
 
-  async function applyIntoOpenTransaction(payload) {
+  async function applyIntoOpenTransaction(payload, options) {
     const modal = ah.sites.wave.transactionModal.findOpenModal();
     if (!modal) {
       const result = recordLastApplyResult({
@@ -91,19 +91,31 @@
     const nextDescription = formatDescription(existing, payload);
     const changed = nextDescription !== existing;
     const ok = changed ? ah.core.react.setFieldValue(descriptionField, nextDescription) : true;
+    const accountResult = await ah.features.waveAccountSwitcher.switchToPreferred?.(modal);
+    const taxResult = options?.applyTaxes ?
+      await ah.features.waveTaxButtons.applyBothInOpenTransaction?.() :
+      null;
     const warning = amountWarning(payload);
+    const warnings = [];
+    if (warning) warnings.push(warning);
+    if (accountResult?.attempted && !accountResult.ok) warnings.push(`Preferred account was not selected: ${accountResult.reason}`);
+    if (taxResult && !taxResult.ok) warnings.push(`GST + PST was not applied: ${taxResult.reason}`);
+    const filled = [];
+    if (changed) filled.push("description");
+    if (accountResult?.attempted && accountResult.ok) filled.push("account");
+    if (taxResult?.ok) filled.push("GST + PST");
     const result = recordLastApplyResult({
       ok,
       complete: ok,
       orderId: payload.orderId,
-      filled: changed ? ["description"] : [],
+      filled,
       skipped: changed ? [] : ["description already contains Amazon details"],
-      warnings: warning ? [warning] : [],
+      warnings,
       modalStillOpen: !!ah.sites.wave.transactionModal.findOpenModal(),
       saved: false,
-      message: warning || (changed ? `Applied Amazon details for ${payload.orderId}. Review and save manually.` : "Amazon details were already present. Review and save manually.")
+      message: warnings[0] || (options?.applyTaxes ? "Applied Amazon details and GST + PST. Review and save manually." : `Applied Amazon details for ${payload.orderId}. Review and save manually.`)
     });
-    ah.ui.toast.show(result.message, { tone: warning ? "warn" : "success" });
+    ah.ui.toast.show(result.message, { tone: warnings.length ? "warn" : "success" });
     return result;
   }
 
@@ -120,11 +132,14 @@
   function renderPayloadSummary(payload) {
     const amount = ah.core.money.formatCurrency(payload.amount.value, payload.amount.currency);
     const title = primaryTitle(payload);
-    return [
-      ah.core.dom.el("strong", {}, `Pending Amazon order: ${payload.orderId}`),
-      ah.core.dom.el("span", {}, amount),
-      ah.core.dom.el("span", { class: "ah-help" }, title ? `Product: ${title}` : "Open the matching imported transaction.")
-    ];
+    return ah.core.dom.el("div", { class: "ah-amz-pending-summary" }, [
+      ah.core.dom.el("div", { class: "ah-amz-pending-kicker" }, "Pending Amazon order"),
+      ah.core.dom.el("div", { class: "ah-amz-pending-main" }, [
+        ah.core.dom.el("strong", {}, payload.orderId),
+        ah.core.dom.el("span", { class: "ah-amz-pending-amount" }, amount)
+      ]),
+      ah.core.dom.el("div", { class: "ah-amz-pending-product" }, title || "Open the matching imported transaction.")
+    ]);
   }
 
   function renderModalActions(payload) {
@@ -134,19 +149,28 @@
       "data-ah-amount": payload.amount.value,
       "data-ah-currency": payload.amount.currency
     }, [
-      ...renderPayloadSummary(payload),
-      ah.core.dom.el("button", {
-        type: "button",
-        class: "ah-button",
-        title: "Append the staged Amazon product details to this Wave transaction description without saving.",
-        onclick: () => applyIntoOpenTransaction(payload)
-      }, "Apply Amazon details"),
-      ah.core.dom.el("button", {
-        type: "button",
-        class: "ah-button ah-button-secondary",
-        title: "Remove this staged Amazon order.",
-        onclick: clearPendingPayload
-      }, "Clear")
+      renderPayloadSummary(payload),
+      ah.core.dom.el("div", { class: "ah-amz-pending-actions" }, [
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button",
+          title: "Append Amazon product details and select the preferred card account when the imported card account is visible.",
+          onclick: () => applyIntoOpenTransaction(payload)
+        }, "Apply Amazon details"),
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button",
+          style: "background:#b43232;border-color:#922929;",
+          title: "Apply Amazon details, select the preferred card account when needed, and apply GST + PST. Use after checking the invoice includes both taxes.",
+          onclick: () => applyIntoOpenTransaction(payload, { applyTaxes: true })
+        }, "Apply details + GST/PST"),
+        ah.core.dom.el("button", {
+          type: "button",
+          class: "ah-button ah-button-secondary",
+          title: "Remove this staged Amazon order.",
+          onclick: clearPendingPayload
+        }, "Clear")
+      ])
     ]);
   }
 
@@ -168,10 +192,10 @@
   }
 
   function renderBanner(payload) {
-    return ah.core.dom.el("div", {}, [
-      ...renderPayloadSummary(payload),
+    return ah.core.dom.el("div", { class: "ah-amz-pending-card" }, [
+      renderPayloadSummary(payload),
       ah.core.dom.el("div", { class: "ah-help", style: "margin-top:6px;" }, "Open the matching imported Amazon transaction in Wave, then click Apply Amazon details."),
-      ah.core.dom.el("div", { class: "ah-pill-row" }, [
+      ah.core.dom.el("div", { class: "ah-amz-pending-actions" }, [
         ah.core.dom.el("button", {
           type: "button",
           class: "ah-button ah-button-secondary",
