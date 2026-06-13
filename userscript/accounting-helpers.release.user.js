@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.3
+// @version      0.1.4
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -29,7 +29,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.3",
+    version: "0.1.4",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -567,24 +567,70 @@
         color: #16343d;
       }
       .ah-button-secondary:hover { background: #e3eaed; }
+      .ah-icon-button {
+        align-items: center;
+        background: #f2f5f6;
+        border: 1px solid #c6d1d5;
+        border-radius: 6px;
+        color: #243d45;
+        cursor: pointer;
+        display: inline-flex;
+        font: 700 18px/1 system-ui, -apple-system, Segoe UI, sans-serif;
+        height: 40px;
+        justify-content: center;
+        width: 40px;
+      }
+      .ah-icon-button:hover { background: #e5ecef; }
       .ah-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
       .ah-toast-layer {
         bottom: 18px;
         display: grid;
-        gap: 8px;
+        gap: 10px;
         position: fixed;
         right: 18px;
-        width: min(360px, calc(100vw - 36px));
+        width: min(460px, calc(100vw - 36px));
         z-index: 2147483647;
       }
       .ah-toast {
-        background: #13292f;
-        border-left: 4px solid #39a16f;
-        border-radius: 6px;
-        box-shadow: 0 10px 30px rgba(0,0,0,.24);
+        align-items: start;
+        background: #102b31;
+        border: 1px solid rgba(255,255,255,.12);
+        border-left: 5px solid #38a16f;
+        border-radius: 8px;
+        box-shadow: 0 12px 34px rgba(0,0,0,.28);
         color: #fff;
-        font: 13px/1.35 system-ui, -apple-system, Segoe UI, sans-serif;
-        padding: 10px 12px;
+        display: grid;
+        font: 13px/1.45 system-ui, -apple-system, Segoe UI, sans-serif;
+        gap: 10px;
+        grid-template-columns: 28px 1fr;
+        padding: 12px 14px;
+      }
+      .ah-toast-icon {
+        align-items: center;
+        background: rgba(255,255,255,.12);
+        border-radius: 50%;
+        display: inline-flex;
+        font: 800 14px/1 system-ui, sans-serif;
+        height: 28px;
+        justify-content: center;
+        margin-top: 1px;
+        width: 28px;
+      }
+      .ah-toast-icon::before { content: "OK"; font-size: 10px; }
+      .ah-toast-warn { border-left-color: #d79a2b; }
+      .ah-toast-warn .ah-toast-icon::before { content: "!"; font-size: 15px; }
+      .ah-toast-error { border-left-color: #d85a4a; }
+      .ah-toast-error .ah-toast-icon::before { content: "X"; font-size: 13px; }
+      .ah-toast-copy { min-width: 0; }
+      .ah-toast-title {
+        display: block;
+        font: 800 14px/1.25 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0 0 3px;
+      }
+      .ah-toast-body {
+        color: #e9f2f4;
+        overflow-wrap: anywhere;
+        white-space: normal;
       }
       .ah-floating-panel {
         background: #fff;
@@ -621,6 +667,7 @@
         display: flex;
         inset: 0;
         justify-content: center;
+        padding: 12px;
         position: fixed;
         z-index: 2147483647;
       }
@@ -629,30 +676,235 @@
         border-radius: 8px;
         box-shadow: 0 18px 54px rgba(0,0,0,.28);
         color: #152d34;
-        max-height: min(760px, calc(100vh - 32px));
+        max-height: min(820px, calc(100vh - 32px));
         overflow: auto;
-        padding: 18px;
         width: min(680px, calc(100vw - 32px));
       }
-      .ah-modal h2 { font: 700 18px/1.2 system-ui, sans-serif; margin: 0 0 14px; }
-      .ah-modal h3 { font: 700 14px/1.2 system-ui, sans-serif; margin: 18px 0 8px; }
-      .ah-settings-section { border-top: 1px solid #d7e0e3; padding-top: 2px; }
-      .ah-help { color: #4d646b; font: 12px/1.35 system-ui, sans-serif; margin: 0 0 8px; }
-      .ah-form-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-      .ah-field { display: grid; gap: 4px; }
-      .ah-field label { font: 600 12px/1.2 system-ui, sans-serif; }
+      .ah-settings-modal {
+        display: grid;
+        height: min(984px, calc(100vh - 24px));
+        max-height: calc(100vh - 24px);
+        overflow: hidden;
+        padding: 0;
+        width: min(1120px, calc(100vw - 24px));
+      }
+      .ah-settings-form {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        height: 100%;
+        min-height: 0;
+      }
+      .ah-settings-header {
+        align-items: center;
+        background: #fbfdfd;
+        border-bottom: 1px solid #c6d4d9;
+        display: flex;
+        gap: 16px;
+        justify-content: space-between;
+        padding: 18px 22px;
+      }
+      .ah-settings-header h1 {
+        font: 800 22px/1.2 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0;
+      }
+      .ah-settings-header p {
+        color: #60747a;
+        font: 600 12px/1.3 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 4px 0 0;
+      }
+      .ah-settings-body {
+        background: #f7fafb;
+        display: grid;
+        grid-template-columns: 216px minmax(0, 1fr);
+        min-height: 0;
+      }
+      .ah-settings-sidebar {
+        background: #e9eff2;
+        border-right: 1px solid #c6d4d9;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        overflow: auto;
+        padding: 18px 10px;
+      }
+      .ah-settings-tab {
+        align-items: center;
+        background: transparent;
+        border: 0;
+        border-radius: 6px;
+        color: #29454d;
+        cursor: pointer;
+        display: flex;
+        font: 800 14px/1.2 system-ui, -apple-system, Segoe UI, sans-serif;
+        min-height: 44px;
+        padding: 10px 12px;
+        text-align: left;
+        width: 100%;
+      }
+      .ah-settings-tab:hover { background: #dce7eb; color: #132f37; }
+      .ah-settings-tab.is-active {
+        background: #173f4b;
+        color: #fff;
+      }
+      .ah-settings-panels {
+        background: #fff;
+        min-width: 0;
+        overflow: auto;
+        padding: 24px 30px 30px;
+      }
+      .ah-settings-panel[hidden] { display: none !important; }
+      .ah-settings-tab-intro {
+        border-bottom: 1px solid #dfe7ea;
+        margin: 0 0 20px;
+        padding: 0 0 18px;
+      }
+      .ah-settings-kicker {
+        color: #41616b;
+        font: 800 12px/1.2 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0 0 6px;
+        text-transform: uppercase;
+      }
+      .ah-settings-tab-intro h2 {
+        font: 800 20px/1.25 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0 0 8px;
+      }
+      .ah-settings-tab-intro p {
+        color: #4d646b;
+        font: 13px/1.45 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0;
+        max-width: 760px;
+      }
+      .ah-settings-section {
+        background: #fff;
+        border: 1px solid #cbd9de;
+        border-radius: 8px;
+        margin: 0 0 16px;
+        overflow: hidden;
+      }
+      .ah-settings-section-heading {
+        background: #eef5f7;
+        border-bottom: 1px solid #cbd9de;
+        padding: 14px 16px 12px;
+      }
+      .ah-settings-section h3 {
+        font: 800 15px/1.25 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0 0 5px;
+      }
+      .ah-settings-section > .ah-form-grid,
+      .ah-settings-section > .ah-check-list,
+      .ah-settings-section > .ah-pill-row,
+      .ah-settings-section > .ah-overview-grid {
+        margin: 16px;
+      }
+      .ah-help { color: #5b7077; font: 12px/1.4 system-ui, sans-serif; margin: 0; }
+      .ah-form-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+      .ah-field { display: grid; gap: 6px; min-width: 0; }
+      .ah-field label { font: 750 12px/1.25 system-ui, sans-serif; }
       .ah-field input, .ah-field select {
         border: 1px solid #aebdc2;
+        box-sizing: border-box;
         border-radius: 6px;
-        font: 14px/1.2 system-ui, sans-serif;
-        min-height: 34px;
-        padding: 6px 8px;
+        font: 14px/1.35 system-ui, sans-serif;
+        min-height: 44px;
+        min-width: 0;
+        padding: 10px 12px;
+        width: 100%;
+      }
+      .ah-field select { padding-right: 36px; }
+      .ah-field input:focus, .ah-field select:focus {
+        border-color: #2b7388;
+        box-shadow: 0 0 0 3px rgba(43, 115, 136, .16);
+        outline: none;
+      }
+      .ah-check-list {
+        display: grid;
+        gap: 10px;
+      }
+      .ah-setting-check {
+        align-items: start;
+        background: #fff;
+        border: 1px solid #cbd9de;
+        border-radius: 8px;
+        cursor: pointer;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: auto 1fr;
+        margin: 0;
+        padding: 12px;
+      }
+      .ah-setting-check:hover { background: #f5fafb; border-color: #9fb5bd; }
+      .ah-setting-check input {
+        margin: 2px 0 0;
+      }
+      .ah-setting-check-copy {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+      }
+      .ah-setting-check-title {
+        color: #182f36;
+        font: 750 13px/1.25 system-ui, -apple-system, Segoe UI, sans-serif;
+      }
+      .ah-setting-check-help {
+        color: #60747a;
+        font: 12px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
+      }
+      .ah-overview-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .ah-overview-card {
+        background: #fff;
+        border: 1px solid #cbd9de;
+        border-radius: 8px;
+        display: grid;
+        gap: 5px;
+        padding: 12px;
+      }
+      .ah-overview-card strong {
+        color: #182f36;
+        font: 800 13px/1.2 system-ui, sans-serif;
+      }
+      .ah-overview-card span {
+        color: #60747a;
+        font: 12px/1.4 system-ui, sans-serif;
       }
       .ah-check { align-items: center; display: flex; gap: 8px; min-height: 30px; }
       .ah-check input { margin: 0; }
-      .ah-modal-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+      .ah-modal-actions {
+        align-items: center;
+        background: #fbfdfd;
+        border-top: 1px solid #c6d4d9;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+        padding: 14px 18px;
+      }
       .ah-ae-row { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
       .ah-ae-total { color: #184f61; font-weight: 700; }
+      @media (max-width: 760px) {
+        .ah-modal-backdrop { align-items: stretch; padding: 8px; }
+        .ah-settings-modal { height: calc(100vh - 16px); width: calc(100vw - 16px); }
+        .ah-settings-header { padding: 14px; }
+        .ah-settings-body {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto minmax(0, 1fr);
+        }
+        .ah-settings-sidebar {
+          border-bottom: 1px solid #d7e0e3;
+          border-right: 0;
+          flex-direction: row;
+          padding: 10px;
+        }
+        .ah-settings-tab {
+          flex: 0 0 auto;
+          min-width: 118px;
+        }
+        .ah-settings-panels { padding: 16px; }
+        .ah-form-grid { grid-template-columns: 1fr; }
+      }
     `;
 
     if (typeof GM_addStyle === "function") {
@@ -677,6 +929,13 @@
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
   ah.ui = ah.ui || {};
 
+  const defaultTimeout = 11000;
+  const toneTitles = {
+    success: "Done",
+    warn: "Needs attention",
+    error: "Error"
+  };
+
   function ensureToastLayer() {
     let layer = document.getElementById("ah-toast-layer");
     if (!layer) {
@@ -688,15 +947,59 @@
     return layer;
   }
 
+  function shouldShowTitle(message, options) {
+    return !!options?.title || !!options?.tone || String(message || "").length > 90;
+  }
+
+  function toastTitle(message, options) {
+    if (options?.title) return options.title;
+    if (String(message || "").startsWith("Partially filled Wave transaction")) return "Partial fill";
+    return toneTitles[options?.tone] || "Accounting Helpers";
+  }
+
   function show(message, options) {
     const layer = ensureToastLayer();
+    const tone = options?.tone || "success";
     const toast = document.createElement("div");
-    toast.className = "ah-toast";
-    toast.textContent = message;
-    if (options?.tone === "error") toast.style.borderLeftColor = "#d85a4a";
-    if (options?.tone === "warn") toast.style.borderLeftColor = "#c99023";
+    toast.className = `ah-toast ah-toast-${tone}`;
+    toast.setAttribute("role", tone === "error" || tone === "warn" ? "alert" : "status");
+
+    const icon = document.createElement("span");
+    icon.className = "ah-toast-icon";
+    icon.setAttribute("aria-hidden", "true");
+
+    const copy = document.createElement("div");
+    copy.className = "ah-toast-copy";
+
+    if (shouldShowTitle(message, options)) {
+      const title = document.createElement("strong");
+      title.className = "ah-toast-title";
+      title.textContent = toastTitle(message, options);
+      copy.append(title);
+    }
+
+    const body = document.createElement("div");
+    body.className = "ah-toast-body";
+    body.textContent = message;
+    copy.append(body);
+
+    toast.append(icon, copy);
     layer.append(toast);
-    setTimeout(() => toast.remove(), options?.timeout || 4200);
+
+    const timeout = options?.timeout === undefined ? defaultTimeout : options.timeout;
+    if (timeout > 0) {
+      let remaining = timeout;
+      let started = Date.now();
+      let timer = setTimeout(() => toast.remove(), remaining);
+      toast.addEventListener("mouseenter", () => {
+        clearTimeout(timer);
+        remaining -= Date.now() - started;
+      });
+      toast.addEventListener("mouseleave", () => {
+        started = Date.now();
+        timer = setTimeout(() => toast.remove(), Math.max(1000, remaining));
+      });
+    }
     return toast;
   }
 
@@ -737,16 +1040,42 @@
   const ah = window.AccountingHelpers = window.AccountingHelpers || {};
   ah.ui = ah.ui || {};
 
+  const tabs = [
+    {
+      id: "general",
+      label: "General",
+      kicker: "General settings",
+      title: "Wave transaction helpers",
+      description: "Defaults and helper behavior used inside Wave transaction screens."
+    },
+    {
+      id: "aliexpress",
+      label: "AliExpress",
+      kicker: "AliExpress settings",
+      title: "Orders, currency, and Wave import",
+      description: "AliExpress display settings and controls for staging orders into Wave."
+    },
+    {
+      id: "about",
+      label: "About",
+      kicker: "Accounting Helpers",
+      title: "What this script does",
+      description: "Local browser helpers for Wave and AliExpress accounting workflows."
+    }
+  ];
+
   const aliExpressFields = [
     {
       path: "aliExpress.defaultCurrency",
       label: "AliExpress source currency",
-      title: "Currency shown by AliExpress before conversion helpers run."
+      title: "Currency shown by AliExpress before conversion helpers run.",
+      help: "Default source currency label for AliExpress helper displays."
     },
     {
       path: "aliExpress.targetCurrency",
       label: "Accounting target currency",
-      title: "Currency used by accounting helper displays and staged Wave payloads."
+      title: "Currency used by accounting helper displays and staged Wave payloads.",
+      help: "Target currency label used by converted totals and staged Wave payloads."
     }
   ];
 
@@ -754,22 +1083,26 @@
     {
       path: "wave.defaultAliExpressVendor",
       label: "Default AliExpress vendor",
-      title: "Wave vendor/payee to use when filling a staged AliExpress order."
+      title: "Wave vendor/payee to use when filling a staged AliExpress order.",
+      help: "Payee value entered when an AliExpress order fills a Wave transaction."
     },
     {
       path: "wave.defaultAliExpressAccount",
       label: "Default Wave account",
-      title: "Wave account field value to use for AliExpress transactions."
+      title: "Wave account field value to use for AliExpress transactions.",
+      help: "Payment account value entered for staged AliExpress orders."
     },
     {
       path: "wave.defaultAliExpressCategory",
       label: "Default Wave category",
-      title: "Wave category field value to use for AliExpress transactions."
+      title: "Wave category field value to use for AliExpress transactions.",
+      help: "Category value entered for staged AliExpress orders."
     },
     {
       path: "wave.descriptionPrefix",
       label: "Description prefix",
-      title: "Text placed before the AliExpress order ID in the Wave description."
+      title: "Text placed before the AliExpress order ID in the Wave description.",
+      help: "Prepended to the order ID when the Wave description is filled."
     }
   ];
 
@@ -777,38 +1110,50 @@
     {
       path: "wave.accounts.amex",
       label: "Switch account 1",
-      title: "First saved Wave account used by the account switch helper."
+      title: "First saved Wave account used by the account switch helper.",
+      help: "First account used by the floating Wave account switcher."
     },
     {
       path: "wave.accounts.creditCard",
       label: "Switch account 2",
-      title: "Second saved Wave account used by the account switch helper."
+      title: "Second saved Wave account used by the account switch helper.",
+      help: "Second account used by the floating Wave account switcher."
+    }
+  ];
+
+  const waveHelperChecks = [
+    {
+      path: "wave.autoUpdateTaxPopover",
+      label: "Update visible tax amount after tax changes",
+      title: "Keeps the Wave tax popover display aligned after the tax helper changes a transaction.",
+      help: "When a GST/PST helper changes tax, also refresh the amount shown in Wave's tax popover."
+    },
+    {
+      path: "wave.markReviewedAutoSave",
+      label: "Save after Mark as reviewed",
+      title: "Only affects the explicit Mark as reviewed helper button.",
+      help: "After the helper marks a transaction as reviewed, click Wave's Save button automatically."
     }
   ];
 
   const aliToWaveChecks = [
     {
       path: "aliToWave.allowReimport",
-      label: "Allow staging already imported AliExpress orders",
-      title: "When off, orders already filled into Wave are disabled on AliExpress."
-    }
-  ];
-
-  const helperChecks = [
-    {
-      path: "wave.autoUpdateTaxPopover",
-      label: "When changing Wave tax, also update the visible tax popover amount",
-      title: "Keeps the Wave tax popover display aligned after the tax helper changes a transaction."
+      label: "Allow already imported orders to be staged again",
+      title: "When off, orders already filled into Wave are disabled on AliExpress.",
+      help: "Leave this off during normal use to avoid accidentally filling the same order twice."
     },
     {
-      path: "wave.markReviewedAutoSave",
-      label: "After Mark as reviewed, click Save automatically",
-      title: "Only affects the explicit Mark as reviewed helper button."
+      path: "aliToWave.autoFillPending",
+      label: "Auto-fill when a Wave transaction modal is open",
+      title: "When on, a pending AliExpress order fills the open Wave transaction without pressing Fill.",
+      help: "Only runs when Wave already has an edit transaction modal open."
     },
     {
       path: "aliToWave.autoSaveAfterFill",
-      label: "After filling an AliExpress payload, click Save when every field was filled",
-      title: "Wave transactions are not saved automatically unless this is enabled."
+      label: "Save Wave transaction after every field was filled",
+      title: "Wave transactions are not saved automatically unless this is enabled.",
+      help: "Only clicks Save when the AliExpress payload filled every required Wave field."
     }
   ];
 
@@ -822,27 +1167,40 @@
       title: field.title || ""
     });
     input.value = ah.core.settings.get(field.path, "");
-    wrapper.append(ah.core.dom.el("label", { for: id, title: field.title || "" }, field.label), input);
+    wrapper.append(
+      ah.core.dom.el("label", { for: id, title: field.title || "" }, field.label),
+      input
+    );
     if (field.help) wrapper.append(ah.core.dom.el("div", { class: "ah-help" }, field.help));
     return wrapper;
   }
 
-  function selectFor(path, label, options, title) {
+  function selectFor(path, label, options, title, helpText) {
     const wrapper = ah.core.dom.el("div", { class: "ah-field" });
     const id = `ah-setting-${path.replace(/\W/g, "-")}`;
     const select = ah.core.dom.el("select", { id, "data-setting-path": path, title });
     options.forEach((option) => select.append(ah.core.dom.el("option", { value: option }, option)));
     select.value = ah.core.settings.get(path, options[0]);
     wrapper.append(ah.core.dom.el("label", { for: id, title }, label), select);
+    if (helpText) wrapper.append(ah.core.dom.el("div", { class: "ah-help" }, helpText));
     return wrapper;
   }
 
   function checkFor(item) {
-    const input = ah.core.dom.el("input", { type: "checkbox", "data-setting-path": item.path, title: item.title || "" });
+    const id = `ah-setting-${item.path.replace(/\W/g, "-")}`;
+    const input = ah.core.dom.el("input", {
+      id,
+      type: "checkbox",
+      "data-setting-path": item.path,
+      title: item.title || ""
+    });
     input.checked = !!ah.core.settings.get(item.path, false);
-    return ah.core.dom.el("label", { class: "ah-check", title: item.title || "" }, [
+    return ah.core.dom.el("label", { class: "ah-setting-check", title: item.title || "" }, [
       input,
-      ah.core.dom.el("span", {}, item.label)
+      ah.core.dom.el("span", { class: "ah-setting-check-copy" }, [
+        ah.core.dom.el("span", { class: "ah-setting-check-title" }, item.label),
+        ah.core.dom.el("span", { class: "ah-setting-check-help" }, item.help || item.title || "")
+      ])
     ]);
   }
 
@@ -852,9 +1210,11 @@
 
   function section(title, children, description) {
     const node = ah.core.dom.el("section", { class: "ah-settings-section" }, [
-      ah.core.dom.el("h3", {}, title)
+      ah.core.dom.el("div", { class: "ah-settings-section-heading" }, [
+        ah.core.dom.el("h3", {}, title),
+        description ? help(description) : null
+      ])
     ]);
-    if (description) node.append(help(description));
     children.filter(Boolean).forEach((child) => node.append(child));
     return node;
   }
@@ -865,10 +1225,10 @@
     return grid;
   }
 
-  function checkGrid(items) {
-    const grid = ah.core.dom.el("div", { class: "ah-form-grid" });
-    items.forEach((item) => grid.append(checkFor(item)));
-    return grid;
+  function checkList(items) {
+    const list = ah.core.dom.el("div", { class: "ah-check-list" });
+    items.forEach((item) => list.append(checkFor(item)));
+    return list;
   }
 
   function captureButton(label, path, read, title) {
@@ -917,7 +1277,117 @@
     return section(
       "Capture from current Wave transaction",
       [captureRow],
-      "Open a Wave edit transaction modal first, then use these buttons to store current field values in Tampermonkey settings."
+      "Open a Wave edit transaction modal first, then save the current field values into Tampermonkey settings."
+    );
+  }
+
+  function tabIntro(tab) {
+    return ah.core.dom.el("div", { class: "ah-settings-tab-intro" }, [
+      ah.core.dom.el("div", { class: "ah-settings-kicker" }, tab.kicker),
+      ah.core.dom.el("h2", {}, tab.title),
+      ah.core.dom.el("p", {}, tab.description)
+    ]);
+  }
+
+  function overviewGrid() {
+    return ah.core.dom.el("div", { class: "ah-overview-grid" }, [
+      ah.core.dom.el("div", { class: "ah-overview-card" }, [
+        ah.core.dom.el("strong", {}, "Storage"),
+        ah.core.dom.el("span", {}, "Saved locally in Tampermonkey for this browser.")
+      ]),
+      ah.core.dom.el("div", { class: "ah-overview-card" }, [
+        ah.core.dom.el("strong", {}, "Wave"),
+        ah.core.dom.el("span", {}, "Fills transaction fields, switches accounts, and assists review/tax actions.")
+      ]),
+      ah.core.dom.el("div", { class: "ah-overview-card" }, [
+        ah.core.dom.el("strong", {}, "AliExpress"),
+        ah.core.dom.el("span", {}, "Converts order totals, copies CAD values, and stages orders for Wave.")
+      ]),
+      ah.core.dom.el("div", { class: "ah-overview-card" }, [
+        ah.core.dom.el("strong", {}, "Future tabs"),
+        ah.core.dom.el("span", {}, "Add platform-specific settings here without mixing workflows together.")
+      ])
+    ]);
+  }
+
+  function panelFor(tab) {
+    const panel = ah.core.dom.el("div", {
+      id: `ah-settings-panel-${tab.id}`,
+      class: "ah-settings-panel",
+      role: "tabpanel",
+      "aria-labelledby": `ah-settings-tab-${tab.id}`,
+      "data-settings-panel": tab.id
+    }, [tabIntro(tab)]);
+
+    if (tab.id === "general") {
+      const capture = captureSection();
+      panel.append(
+        section("Wave defaults for AliExpress orders", [
+          fieldGrid(waveDefaultFields),
+          selectFor(
+            "wave.defaultAliExpressType",
+            "Default Wave transaction type",
+            ["Withdrawal", "Deposit"],
+            "Wave transaction type to use when filling a staged AliExpress order.",
+            "Applied when an AliExpress order fills a Wave transaction."
+          )
+        ], "Values used when a staged AliExpress order fills fields in Wave."),
+        section("Wave helper behavior", [
+          fieldGrid(helperFields),
+          checkList(waveHelperChecks)
+        ], "Controls for helper buttons shown inside Wave.")
+      );
+      if (capture) panel.append(capture);
+    }
+
+    if (tab.id === "aliexpress") {
+      panel.append(
+        section("Currencies", [
+          fieldGrid(aliExpressFields)
+        ], "Used by AliExpress order total conversion and copy helpers."),
+        section("Staging and fill behavior", [
+          checkList(aliToWaveChecks)
+        ], "Clicking Stage for Wave stores one pending order. If Wave is already open, no duplicate tab is opened.")
+      );
+    }
+
+    if (tab.id === "about") {
+      panel.append(
+        section("Overview", [
+          overviewGrid()
+        ], "Settings are stored locally in Tampermonkey for this browser.")
+      );
+    }
+
+    return panel;
+  }
+
+  function activateTab(modal, tabId) {
+    modal.querySelectorAll("[data-settings-tab]").forEach((tab) => {
+      const selected = tab.getAttribute("data-settings-tab") === tabId;
+      tab.classList.toggle("is-active", selected);
+      tab.setAttribute("aria-selected", String(selected));
+    });
+    modal.querySelectorAll("[data-settings-panel]").forEach((panel) => {
+      const selected = panel.getAttribute("data-settings-panel") === tabId;
+      panel.hidden = !selected;
+    });
+  }
+
+  function sidebarFor(modal) {
+    return ah.core.dom.el("nav", { class: "ah-settings-sidebar", "aria-label": "Settings sections" },
+      tabs.map((tab) => ah.core.dom.el("button", {
+        id: `ah-settings-tab-${tab.id}`,
+        type: "button",
+        class: "ah-settings-tab",
+        role: "tab",
+        "aria-selected": "false",
+        "aria-controls": `ah-settings-panel-${tab.id}`,
+        "data-settings-tab": tab.id,
+        onclick: () => activateTab(modal, tab.id)
+      }, [
+        ah.core.dom.el("span", {}, tab.label)
+      ]))
     );
   }
 
@@ -927,9 +1397,28 @@
 
     const settings = ah.core.settings.all();
     const backdrop = ah.core.dom.el("div", { id: "ah-settings-modal", class: "ah-modal-backdrop" });
-    const modal = ah.core.dom.el("div", { class: "ah-modal", role: "dialog", "aria-modal": "true" });
+    const modal = ah.core.dom.el("div", { class: "ah-modal ah-settings-modal", role: "dialog", "aria-modal": "true", "aria-labelledby": "ah-settings-title" });
 
-    const form = ah.core.dom.el("form", {});
+    const form = ah.core.dom.el("form", { class: "ah-settings-form" });
+    const closeButton = ah.core.dom.el("button", {
+      type: "button",
+      class: "ah-icon-button",
+      title: "Close settings without saving changes.",
+      "aria-label": "Close settings",
+      onclick: close
+    }, "X");
+
+    const header = ah.core.dom.el("div", { class: "ah-settings-header" }, [
+      ah.core.dom.el("div", {}, [
+        ah.core.dom.el("h1", { id: "ah-settings-title" }, "Settings"),
+        ah.core.dom.el("p", {}, "Accounting Helpers")
+      ]),
+      closeButton
+    ]);
+
+    const panels = ah.core.dom.el("div", { class: "ah-settings-panels" }, tabs.map(panelFor));
+    const body = ah.core.dom.el("div", { class: "ah-settings-body" });
+    body.append(sidebarFor(modal), panels);
 
     const actions = ah.core.dom.el("div", { class: "ah-modal-actions" }, [
       ah.core.dom.el("button", {
@@ -946,37 +1435,14 @@
           if (confirm("Reset Accounting Helpers settings?")) {
             ah.core.settings.reset();
             close();
-            ah.ui.toast.show("Settings reset.");
+            ah.ui.toast.show("Settings reset.", { title: "Settings reset" });
           }
         }
       }, "Reset"),
       ah.core.dom.el("button", { type: "submit", class: "ah-button", title: "Save settings to Tampermonkey storage." }, "Save")
     ]);
 
-    const content = [
-      ah.core.dom.el("h2", {}, "Accounting Helpers Settings"),
-      section("AliExpress to Wave", [
-        help("Clicking Stage for Wave stores one pending AliExpress order. If no recent Wave tab heartbeat is detected, Wave transactions opens automatically; if Wave is already open, no duplicate tab is opened."),
-        fieldGrid(aliExpressFields),
-        checkGrid(aliToWaveChecks)
-      ]),
-      section("Wave transaction defaults", [
-        fieldGrid(waveDefaultFields),
-        selectFor(
-          "wave.defaultAliExpressType",
-          "Default Wave transaction type",
-          ["Withdrawal", "Deposit"],
-          "Wave transaction type to use when filling a staged AliExpress order."
-        )
-      ]),
-      section("Wave transaction helpers", [
-        fieldGrid(helperFields),
-        checkGrid(helperChecks)
-      ]),
-      captureSection(),
-      actions
-    ].filter(Boolean);
-    form.append(...content);
+    form.append(header, body, actions);
 
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -994,7 +1460,7 @@
       });
       ah.core.settings.save(next);
       close();
-      ah.ui.toast.show("Settings saved.");
+      ah.ui.toast.show("Settings saved.", { title: "Settings saved" });
     });
 
     modal.append(form);
@@ -1003,6 +1469,7 @@
       if (event.target === backdrop) close();
     });
     document.body.append(backdrop);
+    activateTab(modal, "general");
   }
 
   function close() {

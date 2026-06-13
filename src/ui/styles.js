@@ -28,24 +28,70 @@
         color: #16343d;
       }
       .ah-button-secondary:hover { background: #e3eaed; }
+      .ah-icon-button {
+        align-items: center;
+        background: #f2f5f6;
+        border: 1px solid #c6d1d5;
+        border-radius: 6px;
+        color: #243d45;
+        cursor: pointer;
+        display: inline-flex;
+        font: 700 18px/1 system-ui, -apple-system, Segoe UI, sans-serif;
+        height: 40px;
+        justify-content: center;
+        width: 40px;
+      }
+      .ah-icon-button:hover { background: #e5ecef; }
       .ah-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
       .ah-toast-layer {
         bottom: 18px;
         display: grid;
-        gap: 8px;
+        gap: 10px;
         position: fixed;
         right: 18px;
-        width: min(360px, calc(100vw - 36px));
+        width: min(460px, calc(100vw - 36px));
         z-index: 2147483647;
       }
       .ah-toast {
-        background: #13292f;
-        border-left: 4px solid #39a16f;
-        border-radius: 6px;
-        box-shadow: 0 10px 30px rgba(0,0,0,.24);
+        align-items: start;
+        background: #102b31;
+        border: 1px solid rgba(255,255,255,.12);
+        border-left: 5px solid #38a16f;
+        border-radius: 8px;
+        box-shadow: 0 12px 34px rgba(0,0,0,.28);
         color: #fff;
-        font: 13px/1.35 system-ui, -apple-system, Segoe UI, sans-serif;
-        padding: 10px 12px;
+        display: grid;
+        font: 13px/1.45 system-ui, -apple-system, Segoe UI, sans-serif;
+        gap: 10px;
+        grid-template-columns: 28px 1fr;
+        padding: 12px 14px;
+      }
+      .ah-toast-icon {
+        align-items: center;
+        background: rgba(255,255,255,.12);
+        border-radius: 50%;
+        display: inline-flex;
+        font: 800 14px/1 system-ui, sans-serif;
+        height: 28px;
+        justify-content: center;
+        margin-top: 1px;
+        width: 28px;
+      }
+      .ah-toast-icon::before { content: "OK"; font-size: 10px; }
+      .ah-toast-warn { border-left-color: #d79a2b; }
+      .ah-toast-warn .ah-toast-icon::before { content: "!"; font-size: 15px; }
+      .ah-toast-error { border-left-color: #d85a4a; }
+      .ah-toast-error .ah-toast-icon::before { content: "X"; font-size: 13px; }
+      .ah-toast-copy { min-width: 0; }
+      .ah-toast-title {
+        display: block;
+        font: 800 14px/1.25 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0 0 3px;
+      }
+      .ah-toast-body {
+        color: #e9f2f4;
+        overflow-wrap: anywhere;
+        white-space: normal;
       }
       .ah-floating-panel {
         background: #fff;
@@ -82,6 +128,7 @@
         display: flex;
         inset: 0;
         justify-content: center;
+        padding: 12px;
         position: fixed;
         z-index: 2147483647;
       }
@@ -90,30 +137,235 @@
         border-radius: 8px;
         box-shadow: 0 18px 54px rgba(0,0,0,.28);
         color: #152d34;
-        max-height: min(760px, calc(100vh - 32px));
+        max-height: min(820px, calc(100vh - 32px));
         overflow: auto;
-        padding: 18px;
         width: min(680px, calc(100vw - 32px));
       }
-      .ah-modal h2 { font: 700 18px/1.2 system-ui, sans-serif; margin: 0 0 14px; }
-      .ah-modal h3 { font: 700 14px/1.2 system-ui, sans-serif; margin: 18px 0 8px; }
-      .ah-settings-section { border-top: 1px solid #d7e0e3; padding-top: 2px; }
-      .ah-help { color: #4d646b; font: 12px/1.35 system-ui, sans-serif; margin: 0 0 8px; }
-      .ah-form-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-      .ah-field { display: grid; gap: 4px; }
-      .ah-field label { font: 600 12px/1.2 system-ui, sans-serif; }
+      .ah-settings-modal {
+        display: grid;
+        height: min(984px, calc(100vh - 24px));
+        max-height: calc(100vh - 24px);
+        overflow: hidden;
+        padding: 0;
+        width: min(1120px, calc(100vw - 24px));
+      }
+      .ah-settings-form {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        height: 100%;
+        min-height: 0;
+      }
+      .ah-settings-header {
+        align-items: center;
+        background: #fbfdfd;
+        border-bottom: 1px solid #c6d4d9;
+        display: flex;
+        gap: 16px;
+        justify-content: space-between;
+        padding: 18px 22px;
+      }
+      .ah-settings-header h1 {
+        font: 800 22px/1.2 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0;
+      }
+      .ah-settings-header p {
+        color: #60747a;
+        font: 600 12px/1.3 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 4px 0 0;
+      }
+      .ah-settings-body {
+        background: #f7fafb;
+        display: grid;
+        grid-template-columns: 216px minmax(0, 1fr);
+        min-height: 0;
+      }
+      .ah-settings-sidebar {
+        background: #e9eff2;
+        border-right: 1px solid #c6d4d9;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        overflow: auto;
+        padding: 18px 10px;
+      }
+      .ah-settings-tab {
+        align-items: center;
+        background: transparent;
+        border: 0;
+        border-radius: 6px;
+        color: #29454d;
+        cursor: pointer;
+        display: flex;
+        font: 800 14px/1.2 system-ui, -apple-system, Segoe UI, sans-serif;
+        min-height: 44px;
+        padding: 10px 12px;
+        text-align: left;
+        width: 100%;
+      }
+      .ah-settings-tab:hover { background: #dce7eb; color: #132f37; }
+      .ah-settings-tab.is-active {
+        background: #173f4b;
+        color: #fff;
+      }
+      .ah-settings-panels {
+        background: #fff;
+        min-width: 0;
+        overflow: auto;
+        padding: 24px 30px 30px;
+      }
+      .ah-settings-panel[hidden] { display: none !important; }
+      .ah-settings-tab-intro {
+        border-bottom: 1px solid #dfe7ea;
+        margin: 0 0 20px;
+        padding: 0 0 18px;
+      }
+      .ah-settings-kicker {
+        color: #41616b;
+        font: 800 12px/1.2 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0 0 6px;
+        text-transform: uppercase;
+      }
+      .ah-settings-tab-intro h2 {
+        font: 800 20px/1.25 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0 0 8px;
+      }
+      .ah-settings-tab-intro p {
+        color: #4d646b;
+        font: 13px/1.45 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0;
+        max-width: 760px;
+      }
+      .ah-settings-section {
+        background: #fff;
+        border: 1px solid #cbd9de;
+        border-radius: 8px;
+        margin: 0 0 16px;
+        overflow: hidden;
+      }
+      .ah-settings-section-heading {
+        background: #eef5f7;
+        border-bottom: 1px solid #cbd9de;
+        padding: 14px 16px 12px;
+      }
+      .ah-settings-section h3 {
+        font: 800 15px/1.25 system-ui, -apple-system, Segoe UI, sans-serif;
+        margin: 0 0 5px;
+      }
+      .ah-settings-section > .ah-form-grid,
+      .ah-settings-section > .ah-check-list,
+      .ah-settings-section > .ah-pill-row,
+      .ah-settings-section > .ah-overview-grid {
+        margin: 16px;
+      }
+      .ah-help { color: #5b7077; font: 12px/1.4 system-ui, sans-serif; margin: 0; }
+      .ah-form-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+      .ah-field { display: grid; gap: 6px; min-width: 0; }
+      .ah-field label { font: 750 12px/1.25 system-ui, sans-serif; }
       .ah-field input, .ah-field select {
         border: 1px solid #aebdc2;
+        box-sizing: border-box;
         border-radius: 6px;
-        font: 14px/1.2 system-ui, sans-serif;
-        min-height: 34px;
-        padding: 6px 8px;
+        font: 14px/1.35 system-ui, sans-serif;
+        min-height: 44px;
+        min-width: 0;
+        padding: 10px 12px;
+        width: 100%;
+      }
+      .ah-field select { padding-right: 36px; }
+      .ah-field input:focus, .ah-field select:focus {
+        border-color: #2b7388;
+        box-shadow: 0 0 0 3px rgba(43, 115, 136, .16);
+        outline: none;
+      }
+      .ah-check-list {
+        display: grid;
+        gap: 10px;
+      }
+      .ah-setting-check {
+        align-items: start;
+        background: #fff;
+        border: 1px solid #cbd9de;
+        border-radius: 8px;
+        cursor: pointer;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: auto 1fr;
+        margin: 0;
+        padding: 12px;
+      }
+      .ah-setting-check:hover { background: #f5fafb; border-color: #9fb5bd; }
+      .ah-setting-check input {
+        margin: 2px 0 0;
+      }
+      .ah-setting-check-copy {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+      }
+      .ah-setting-check-title {
+        color: #182f36;
+        font: 750 13px/1.25 system-ui, -apple-system, Segoe UI, sans-serif;
+      }
+      .ah-setting-check-help {
+        color: #60747a;
+        font: 12px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
+      }
+      .ah-overview-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .ah-overview-card {
+        background: #fff;
+        border: 1px solid #cbd9de;
+        border-radius: 8px;
+        display: grid;
+        gap: 5px;
+        padding: 12px;
+      }
+      .ah-overview-card strong {
+        color: #182f36;
+        font: 800 13px/1.2 system-ui, sans-serif;
+      }
+      .ah-overview-card span {
+        color: #60747a;
+        font: 12px/1.4 system-ui, sans-serif;
       }
       .ah-check { align-items: center; display: flex; gap: 8px; min-height: 30px; }
       .ah-check input { margin: 0; }
-      .ah-modal-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+      .ah-modal-actions {
+        align-items: center;
+        background: #fbfdfd;
+        border-top: 1px solid #c6d4d9;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+        padding: 14px 18px;
+      }
       .ah-ae-row { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
       .ah-ae-total { color: #184f61; font-weight: 700; }
+      @media (max-width: 760px) {
+        .ah-modal-backdrop { align-items: stretch; padding: 8px; }
+        .ah-settings-modal { height: calc(100vh - 16px); width: calc(100vw - 16px); }
+        .ah-settings-header { padding: 14px; }
+        .ah-settings-body {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto minmax(0, 1fr);
+        }
+        .ah-settings-sidebar {
+          border-bottom: 1px solid #d7e0e3;
+          border-right: 0;
+          flex-direction: row;
+          padding: 10px;
+        }
+        .ah-settings-tab {
+          flex: 0 0 auto;
+          min-width: 118px;
+        }
+        .ah-settings-panels { padding: 16px; }
+        .ah-form-grid { grid-template-columns: 1fr; }
+      }
     `;
 
     if (typeof GM_addStyle === "function") {
