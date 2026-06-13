@@ -2,8 +2,8 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const version = "0.1.16";
-const devBootstrapVersion = "0.1.16-dev";
+const version = "0.1.17";
+const devBootstrapVersion = "0.1.17-dev";
 const devOrigin = process.env.ACCOUNTING_HELPERS_DEV_ORIGIN || "http://127.0.0.1:5173";
 
 const sourceFiles = [

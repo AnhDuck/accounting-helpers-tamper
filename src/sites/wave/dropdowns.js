@@ -5,15 +5,52 @@
 
   const dom = () => ah.core.dom;
 
+  function normalize(value) {
+    return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function selectWrapper(field) {
+    return field?.closest?.(".wv-select") || field;
+  }
+
+  function selectedText(field) {
+    const wrapper = selectWrapper(field);
+    const label = wrapper?.querySelector?.(".wv-select__label");
+    return dom().text(label || field);
+  }
+
   function isSelected(field, optionText) {
-    const text = dom().text(field).toLowerCase();
-    const value = String(field.value || "").toLowerCase();
-    const needle = String(optionText || "").toLowerCase();
+    const text = normalize(selectedText(field));
+    const value = normalize(field.value);
+    const needle = normalize(optionText);
     return !!needle && (text.includes(needle) || value.includes(needle));
   }
 
-  function visibleOptions() {
-    return dom().visible(dom().qsa("[role='option'], li, button, [data-testid*='option']"));
+  function visibleOptions(field) {
+    const selector = "[role='option'], [role='menuitemradio'], .wv-select__menu__option, [data-testid*='option']";
+    const wrapper = selectWrapper(field);
+    const scoped = wrapper ? dom().visible(dom().qsa(selector, wrapper)) : [];
+    return scoped.length ? scoped : dom().visible(dom().qsa(selector));
+  }
+
+  function findOption(field, optionText) {
+    const needle = normalize(optionText);
+    const options = visibleOptions(field);
+    return options.find((item) => normalize(dom().text(item)) === needle) ||
+      options.find((item) => normalize(dom().text(item)).includes(needle));
+  }
+
+  async function closeMenu(field) {
+    const eventOptions = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true };
+    field.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
+    document.activeElement?.dispatchEvent?.(new KeyboardEvent("keydown", eventOptions));
+    document.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
+    document.activeElement?.blur?.();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    if (visibleOptions(field).length) {
+      field.click();
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
   }
 
   async function chooseOption(field, optionText) {
@@ -31,9 +68,12 @@
       return true;
     }
 
-    field.click();
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    let option = visibleOptions().find((item) => dom().text(item).toLowerCase().includes(optionText.toLowerCase()));
+    let option = findOption(field, optionText);
+    if (!option) {
+      field.click();
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      option = findOption(field, optionText);
+    }
     if (!option) {
       const active = document.activeElement;
       if (active && ["INPUT", "TEXTAREA"].includes(active.tagName)) {
@@ -42,13 +82,15 @@
         ah.core.react.setFieldValue(field, optionText);
       }
       await new Promise((resolve) => setTimeout(resolve, 300));
-      option = visibleOptions().find((item) => dom().text(item).toLowerCase().includes(optionText.toLowerCase()));
+      option = findOption(field, optionText);
     }
     if (option) {
       option.click();
       await new Promise((resolve) => setTimeout(resolve, 220));
+      await closeMenu(field);
       return isSelected(field, optionText);
     }
+    await closeMenu(field);
     return isSelected(field, optionText);
   }
 

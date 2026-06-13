@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.16
+// @version      0.1.17
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -29,7 +29,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.16",
+    version: "0.1.17",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -1615,15 +1615,52 @@
 
   const dom = () => ah.core.dom;
 
+  function normalize(value) {
+    return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function selectWrapper(field) {
+    return field?.closest?.(".wv-select") || field;
+  }
+
+  function selectedText(field) {
+    const wrapper = selectWrapper(field);
+    const label = wrapper?.querySelector?.(".wv-select__label");
+    return dom().text(label || field);
+  }
+
   function isSelected(field, optionText) {
-    const text = dom().text(field).toLowerCase();
-    const value = String(field.value || "").toLowerCase();
-    const needle = String(optionText || "").toLowerCase();
+    const text = normalize(selectedText(field));
+    const value = normalize(field.value);
+    const needle = normalize(optionText);
     return !!needle && (text.includes(needle) || value.includes(needle));
   }
 
-  function visibleOptions() {
-    return dom().visible(dom().qsa("[role='option'], li, button, [data-testid*='option']"));
+  function visibleOptions(field) {
+    const selector = "[role='option'], [role='menuitemradio'], .wv-select__menu__option, [data-testid*='option']";
+    const wrapper = selectWrapper(field);
+    const scoped = wrapper ? dom().visible(dom().qsa(selector, wrapper)) : [];
+    return scoped.length ? scoped : dom().visible(dom().qsa(selector));
+  }
+
+  function findOption(field, optionText) {
+    const needle = normalize(optionText);
+    const options = visibleOptions(field);
+    return options.find((item) => normalize(dom().text(item)) === needle) ||
+      options.find((item) => normalize(dom().text(item)).includes(needle));
+  }
+
+  async function closeMenu(field) {
+    const eventOptions = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true };
+    field.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
+    document.activeElement?.dispatchEvent?.(new KeyboardEvent("keydown", eventOptions));
+    document.dispatchEvent(new KeyboardEvent("keydown", eventOptions));
+    document.activeElement?.blur?.();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    if (visibleOptions(field).length) {
+      field.click();
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
   }
 
   async function chooseOption(field, optionText) {
@@ -1641,9 +1678,12 @@
       return true;
     }
 
-    field.click();
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    let option = visibleOptions().find((item) => dom().text(item).toLowerCase().includes(optionText.toLowerCase()));
+    let option = findOption(field, optionText);
+    if (!option) {
+      field.click();
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      option = findOption(field, optionText);
+    }
     if (!option) {
       const active = document.activeElement;
       if (active && ["INPUT", "TEXTAREA"].includes(active.tagName)) {
@@ -1652,13 +1692,15 @@
         ah.core.react.setFieldValue(field, optionText);
       }
       await new Promise((resolve) => setTimeout(resolve, 300));
-      option = visibleOptions().find((item) => dom().text(item).toLowerCase().includes(optionText.toLowerCase()));
+      option = findOption(field, optionText);
     }
     if (option) {
       option.click();
       await new Promise((resolve) => setTimeout(resolve, 220));
+      await closeMenu(field);
       return isSelected(field, optionText);
     }
+    await closeMenu(field);
     return isSelected(field, optionText);
   }
 
@@ -3243,6 +3285,7 @@
   const modalActionsClass = "ah-ali-to-wave-modal-actions";
   const bannerId = "ah-ali-to-wave-banner";
   let autoFillInFlight = false;
+  let autoFillAttemptKey = "";
   let createFillInFlight = false;
   let autoCreateAttemptKey = "";
 
@@ -3292,6 +3335,7 @@
         if (options?.toast !== false) ah.ui.toast.show(opened.message, { tone: "warn" });
         return opened;
       }
+      autoFillAttemptKey = payloadKey(payload);
       const result = await fillOpenTransaction(payload);
       recordCreateFillSavings(opened, result);
       return result;
@@ -3301,7 +3345,7 @@
   }
 
   function recordCreateFillSavings(opened, result) {
-    if (!result?.ok || result.missing?.length) return;
+    if (!result?.complete) return;
     const steps = [...(opened.clicksSavedSteps || []), "Fill staged AliExpress order"];
     if (result.saved) steps.push("Save transaction");
     if (!steps.length) return;
@@ -3409,8 +3453,11 @@
   }
 
   async function maybeAutoFill(payload) {
-    if (autoFillInFlight || !ah.core.settings.get("aliToWave.autoFillPending", false)) return;
+    const key = payloadKey(payload);
+    if (autoFillInFlight || createFillInFlight || autoFillAttemptKey === key) return;
+    if (!ah.core.settings.get("aliToWave.autoFillPending", false)) return;
     if (!ah.sites.wave.transactionModal.findOpenModal()) return;
+    autoFillAttemptKey = key;
     autoFillInFlight = true;
     try {
       await fillOpenTransaction(payload);
@@ -3437,6 +3484,7 @@
     if (!payload) {
       ah.ui.floatingPanel.remove(bannerId);
       removeModalActions();
+      autoFillAttemptKey = "";
       autoCreateAttemptKey = "";
       return;
     }

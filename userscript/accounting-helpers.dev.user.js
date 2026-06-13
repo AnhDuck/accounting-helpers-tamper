@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers Dev
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.16-dev
+// @version      0.1.17-dev
 // @description  Runtime loader for local Accounting Helpers modules.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -103,7 +103,7 @@
 
   async function loadRuntime() {
     const devConfig = Object.freeze({
-      bootstrapVersion: "0.1.16-dev",
+      bootstrapVersion: "0.1.17-dev",
       origin: devOrigin
     });
     const source = await requestText(runtimeUrl);

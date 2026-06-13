@@ -7,6 +7,7 @@
   const modalActionsClass = "ah-ali-to-wave-modal-actions";
   const bannerId = "ah-ali-to-wave-banner";
   let autoFillInFlight = false;
+  let autoFillAttemptKey = "";
   let createFillInFlight = false;
   let autoCreateAttemptKey = "";
 
@@ -56,6 +57,7 @@
         if (options?.toast !== false) ah.ui.toast.show(opened.message, { tone: "warn" });
         return opened;
       }
+      autoFillAttemptKey = payloadKey(payload);
       const result = await fillOpenTransaction(payload);
       recordCreateFillSavings(opened, result);
       return result;
@@ -65,7 +67,7 @@
   }
 
   function recordCreateFillSavings(opened, result) {
-    if (!result?.ok || result.missing?.length) return;
+    if (!result?.complete) return;
     const steps = [...(opened.clicksSavedSteps || []), "Fill staged AliExpress order"];
     if (result.saved) steps.push("Save transaction");
     if (!steps.length) return;
@@ -173,8 +175,11 @@
   }
 
   async function maybeAutoFill(payload) {
-    if (autoFillInFlight || !ah.core.settings.get("aliToWave.autoFillPending", false)) return;
+    const key = payloadKey(payload);
+    if (autoFillInFlight || createFillInFlight || autoFillAttemptKey === key) return;
+    if (!ah.core.settings.get("aliToWave.autoFillPending", false)) return;
     if (!ah.sites.wave.transactionModal.findOpenModal()) return;
+    autoFillAttemptKey = key;
     autoFillInFlight = true;
     try {
       await fillOpenTransaction(payload);
@@ -201,6 +206,7 @@
     if (!payload) {
       ah.ui.floatingPanel.remove(bannerId);
       removeModalActions();
+      autoFillAttemptKey = "";
       autoCreateAttemptKey = "";
       return;
     }
