@@ -1,5 +1,9 @@
 (function () {
-  const devConfig = window.AccountingHelpersDev || {};
+  const devConfig = (
+    typeof AccountingHelpersDevConfig !== "undefined" &&
+    AccountingHelpersDevConfig &&
+    typeof AccountingHelpersDevConfig === "object"
+  ) ? AccountingHelpersDevConfig : window.AccountingHelpersDev || {};
   const devOrigin = devConfig.origin || "http://127.0.0.1:5173";
   const bundleUrl = devOrigin + "/accounting-helpers.dev-bundle.js";
   const statusUrl = devOrigin + "/accounting-helpers.dev-status.json";
@@ -119,7 +123,7 @@
         position: fixed;
         z-index: 2147483646;
       }
-      .ah-dev-status[data-state="stale"], .ah-dev-status[data-state="unknown"] {
+      .ah-dev-status[data-state="stale"] {
         background: #451a03;
         border-color: #f59e0b;
       }
@@ -168,11 +172,15 @@
     ].join(" | ");
     node.append(summary);
 
-    if (state !== "ok") {
+    if (state === "unknown") {
+      const note = document.createElement("span");
+      note.textContent = "Bootstrap version unavailable.";
+      node.append(note);
+    }
+
+    if (state === "stale") {
       const warning = document.createElement("span");
-      warning.textContent = state === "unknown" ?
-        "Bootstrap version cannot be read; update if features behave strangely." :
-        "Bootstrap update available: " + expected;
+      warning.textContent = "Bootstrap update available: " + expected;
       node.append(warning);
 
       if (status.devUserscriptUrl) {
@@ -207,7 +215,10 @@
   async function loadLocalBundle() {
     const startedAt = performance.now();
     const source = await requestText(bundleUrl);
-    new Function(...grantNames, source + "\n//# sourceURL=" + bundleUrl)(...grantNames.map((name) => grants[name]));
+    new Function("AccountingHelpersDevConfig", ...grantNames, source + "\n//# sourceURL=" + bundleUrl)(
+      devConfig,
+      ...grantNames.map((name) => grants[name])
+    );
     const duration = Math.round(performance.now() - startedAt);
     console.info("[Accounting Helpers Dev] Loaded local bundle from " + devOrigin + " in " + duration + "ms");
     ensureDevStatus();

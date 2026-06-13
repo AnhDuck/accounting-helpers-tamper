@@ -105,6 +105,8 @@ To start the dev server automatically after Windows login, run once:
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/install-dev-server-startup-task.ps1
 ```
 
+If Windows denies Task Scheduler access, the installer creates a Startup-folder shortcut that runs the same restart script at login.
+
 ## Debug
 
 The script exposes:

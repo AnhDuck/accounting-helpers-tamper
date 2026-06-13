@@ -2,8 +2,8 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const version = "0.1.15";
-const devBootstrapVersion = "0.1.15-dev";
+const version = "0.1.16";
+const devBootstrapVersion = "0.1.16-dev";
 const devOrigin = process.env.ACCOUNTING_HELPERS_DEV_ORIGIN || "http://127.0.0.1:5173";
 
 const sourceFiles = [
@@ -179,12 +179,15 @@ function devLoaderScript() {
   }
 
   async function loadRuntime() {
-    window.AccountingHelpersDev = Object.assign({}, window.AccountingHelpersDev, {
+    const devConfig = Object.freeze({
       bootstrapVersion: ${JSON.stringify(devBootstrapVersion)},
       origin: devOrigin
     });
     const source = await requestText(runtimeUrl);
-    new Function(...grantNames, source + "\\n//# sourceURL=" + runtimeUrl)(...grantNames.map((name) => grants[name]));
+    new Function("AccountingHelpersDevConfig", ...grantNames, source + "\\n//# sourceURL=" + runtimeUrl)(
+      devConfig,
+      ...grantNames.map((name) => grants[name])
+    );
   }
 
   loadRuntime().catch(showBootstrapFailure);
