@@ -2,7 +2,8 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const version = "0.1.13";
+const version = "0.1.15";
+const devBootstrapVersion = "0.1.15-dev";
 const devOrigin = process.env.ACCOUNTING_HELPERS_DEV_ORIGIN || "http://127.0.0.1:5173";
 
 const sourceFiles = [
@@ -93,7 +94,7 @@ const releaseHeader = userscriptHeader({
 function devLoaderScript() {
   const devHeader = userscriptHeader({
     name: "Accounting Helpers Dev",
-    scriptVersion: `${version}-dev`,
+    scriptVersion: devBootstrapVersion,
     description: "Runtime loader for local Accounting Helpers modules.",
     devUpdateUrls: true,
     devConnect: true
@@ -103,6 +104,31 @@ function devLoaderScript() {
 (function () {
   const devOrigin = ${JSON.stringify(devOrigin)};
   const runtimeUrl = devOrigin + "/accounting-helpers.dev-runtime.js";
+  const grantNames = [
+    "GM_addStyle",
+    "GM_setClipboard",
+    "GM_setValue",
+    "GM_getValue",
+    "GM_deleteValue",
+    "GM_listValues",
+    "GM_addValueChangeListener",
+    "GM_openInTab",
+    "GM_registerMenuCommand",
+    "GM_xmlhttpRequest"
+  ];
+
+  const grants = {
+    GM_addStyle: typeof GM_addStyle === "function" ? GM_addStyle : null,
+    GM_setClipboard: typeof GM_setClipboard === "function" ? GM_setClipboard : null,
+    GM_setValue: typeof GM_setValue === "function" ? GM_setValue : null,
+    GM_getValue: typeof GM_getValue === "function" ? GM_getValue : null,
+    GM_deleteValue: typeof GM_deleteValue === "function" ? GM_deleteValue : null,
+    GM_listValues: typeof GM_listValues === "function" ? GM_listValues : null,
+    GM_addValueChangeListener: typeof GM_addValueChangeListener === "function" ? GM_addValueChangeListener : null,
+    GM_openInTab: typeof GM_openInTab === "function" ? GM_openInTab : null,
+    GM_registerMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
+    GM_xmlhttpRequest: typeof GM_xmlhttpRequest === "function" ? GM_xmlhttpRequest : null
+  };
 
   function withCacheBust(url) {
     return url + (url.includes("?") ? "&" : "?") + "t=" + Date.now();
@@ -153,9 +179,12 @@ function devLoaderScript() {
   }
 
   async function loadRuntime() {
-    window.AccountingHelpersDev = Object.assign({}, window.AccountingHelpersDev, { origin: devOrigin });
+    window.AccountingHelpersDev = Object.assign({}, window.AccountingHelpersDev, {
+      bootstrapVersion: ${JSON.stringify(devBootstrapVersion)},
+      origin: devOrigin
+    });
     const source = await requestText(runtimeUrl);
-    new Function(source + "\\n//# sourceURL=" + runtimeUrl)();
+    new Function(...grantNames, source + "\\n//# sourceURL=" + runtimeUrl)(...grantNames.map((name) => grants[name]));
   }
 
   loadRuntime().catch(showBootstrapFailure);
@@ -195,6 +224,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  devBootstrapVersion,
   build,
   root,
   sourceFiles,

@@ -36,6 +36,16 @@ function currentSourceFiles() {
   return require("./build-release").sourceFiles;
 }
 
+function currentBuildMeta() {
+  delete require.cache[buildReleasePath];
+  const buildRelease = require("./build-release");
+  return {
+    appVersion: buildRelease.version,
+    bootstrapVersion: buildRelease.devBootstrapVersion,
+    sourceFiles: buildRelease.sourceFiles
+  };
+}
+
 function currentSourceBundle() {
   return currentSourceFiles()
     .map((file) => {
@@ -65,6 +75,20 @@ function handleRequest(request, response) {
 
   if (url.pathname === "/" || url.pathname === "/health") {
     send(response, 200, "text/plain; charset=utf-8", "Accounting Helpers dev server is running.\n");
+    return;
+  }
+
+  if (url.pathname === "/accounting-helpers.dev-status.json") {
+    const meta = currentBuildMeta();
+    send(response, 200, "application/json; charset=utf-8", `${JSON.stringify({
+      ok: true,
+      appVersion: meta.appVersion,
+      bootstrapVersion: meta.bootstrapVersion,
+      moduleCount: meta.sourceFiles.length,
+      devUserscriptUrl: `http://${host}:${port}/userscript/accounting-helpers.dev.user.js`,
+      runtimeUrl: `http://${host}:${port}/accounting-helpers.dev-runtime.js`,
+      bundleUrl: `http://${host}:${port}/accounting-helpers.dev-bundle.js`
+    }, null, 2)}\n`);
     return;
   }
 

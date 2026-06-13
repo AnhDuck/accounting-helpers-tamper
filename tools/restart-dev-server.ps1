@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Port = 5173
 $HealthUrl = "http://127.0.0.1:$Port/health"
+$StatusPath = Join-Path $Root ".dev-server-status.json"
 
 function Stop-ExistingDevServer {
   $processes = Get-CimInstance Win32_Process -Filter "name = 'node.exe'" |
@@ -61,4 +62,13 @@ $process = Start-Process -FilePath "node" -ArgumentList "tools\dev-server.js" -W
 Write-Host "Started process $($process.Id)."
 
 Wait-ForHealth
+$status = [ordered]@{
+  pid = $process.Id
+  url = "http://127.0.0.1:$Port"
+  healthUrl = $HealthUrl
+  devUserscriptUrl = "http://127.0.0.1:$Port/userscript/accounting-helpers.dev.user.js"
+  startedAt = (Get-Date).ToString("o")
+}
+$status | ConvertTo-Json | Set-Content -LiteralPath $StatusPath -Encoding UTF8
 Write-Host "Dev userscript URL: http://127.0.0.1:$Port/userscript/accounting-helpers.dev.user.js"
+Write-Host "Status file: $StatusPath"

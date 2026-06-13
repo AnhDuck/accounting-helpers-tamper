@@ -80,6 +80,15 @@ http://127.0.0.1:5173/accounting-helpers.modules.json
 
 Refresh the Wave or AliExpress page after editing source files. Normal code edits do not require reinstalling the Tampermonkey script while `tools/dev-server.js` is running. When adding, removing, or reordering modules, update `sourceFiles` in `tools/build-release.js` and rerun the build.
 
+The app/release version and dev bootstrap version are intentionally separate:
+
+- `version` in `tools/build-release.js` and `src/core/constants.js` is the app/release version.
+- `devBootstrapVersion` in `tools/build-release.js` is only for the installed Tampermonkey dev bootstrap.
+- Ordinary app, module, UI, selector, and runtime changes should not require a Tampermonkey update.
+- Metadata changes such as new `@match`, `@grant`, or `@connect` entries still require a Tampermonkey update.
+
+The dev runtime shows a compact in-page status panel with the app version, installed bootstrap version, server status, and an update button when the bootstrap is stale.
+
 Agent validation should use:
 
 ```powershell
@@ -89,6 +98,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/restart-dev-server.ps1
 That command stops any stale dev server, rebuilds the generated userscripts, starts the server in the background, and checks `http://127.0.0.1:5173/health`.
 
 Tampermonkey limitation: agents cannot directly edit the installed Tampermonkey script. To avoid that problem, keep the installed dev userscript as a stable bootstrap and put future loader changes in `tools/dev-runtime.js`. Metadata changes such as new `@match`, `@grant`, or `@connect` entries still require a one-time Tampermonkey update by the user.
+
+To start the dev server automatically after Windows login, run once:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/install-dev-server-startup-task.ps1
+```
 
 ## Debug
 
