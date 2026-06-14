@@ -394,6 +394,20 @@
         width: 100%;
       }
       .ah-amz-order-row .ah-button { min-height: 30px; }
+      .ah-amz-title-line {
+        box-sizing: border-box;
+        min-height: 30px;
+        padding-left: 88px;
+        position: relative;
+      }
+      .ah-amz-title-line .ah-amz-copy-title {
+        left: 0;
+        min-height: 28px;
+        padding: 5px 9px;
+        position: absolute;
+        top: 0;
+        width: auto;
+      }
       .ah-amz-open-invoice {
         background: #dcf7e7;
         border-color: #8bc7a0;

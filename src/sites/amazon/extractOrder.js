@@ -18,6 +18,11 @@
 
   function findOrderCards(root) {
     return ah.core.dom.qsa(ah.sites.amazon.selectors.orderCard, root || document)
+      .filter((card) => {
+        const rect = card.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return false;
+        return ORDER_ID_RE.test(card.textContent || "") || !!ah.sites.amazon.invoices?.getPopoverElForCard?.(card);
+      })
       .filter((card, index, cards) => cards.findIndex((candidate) => candidate === card || candidate.contains(card)) === index);
   }
 

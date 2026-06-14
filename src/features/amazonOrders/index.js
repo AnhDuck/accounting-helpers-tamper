@@ -13,9 +13,15 @@
     }, ms || 900);
   }
 
-  async function copyTitle(orderCardEl, button) {
-    const order = await ah.sites.amazon.extractOrder.extractOrder(orderCardEl, { includeInvoice: false });
-    const text = ah.sites.amazon.extractOrder.copyTitleTextForOrder(order);
+  function copyTextForItem(itemEl, titleLink) {
+    const rawTitle = ah.core.dom.text(titleLink);
+    const { title } = ah.sites.amazon.extractOrder.truncateTitle(rawTitle, ah.sites.amazon.extractOrder.TITLE_MAX_CHARS);
+    const qty = ah.sites.amazon.extractOrder.getItemQuantity(itemEl);
+    return qty > 1 ? `${qty}x ${title}` : title;
+  }
+
+  async function copyItemTitle(itemEl, titleLink, button) {
+    const text = copyTextForItem(itemEl, titleLink);
     if (!text) {
       setButtonTempText(button, "No title", 900);
       return;
@@ -23,6 +29,30 @@
     const ok = await ah.core.clipboard.writeText(text);
     setButtonTempText(button, ok ? "Copied" : "Copy failed", 900);
     ah.ui.toast.show(ok ? "Amazon product title copied." : "Could not copy Amazon product title.", { tone: ok ? "success" : "warn" });
+  }
+
+  function ensureCopyButtonForItem(itemEl) {
+    if (!itemEl || itemEl.querySelector(":scope .ah-amz-copy-title")) return;
+    const titleLink = ah.sites.amazon.extractOrder.findProductTitleLink(itemEl);
+    if (!titleLink) return;
+    const parent = titleLink.parentElement;
+    if (!parent) return;
+    parent.classList.add("ah-amz-title-line");
+    const copyButton = button("Copy title", "ah-amz-copy-title ah-button-secondary", "Copy this Amazon product title, including quantity when available.", (btn) => copyItemTitle(itemEl, titleLink, btn));
+    parent.insertBefore(copyButton, titleLink);
+  }
+
+  function ensureCopyButtons(orderCardEl) {
+    const items = ah.core.dom.qsa(ah.sites.amazon.selectors.itemRow, orderCardEl)
+      .filter((item) => ah.sites.amazon.extractOrder.findProductTitleLink(item));
+    if (items.length) {
+      items.forEach(ensureCopyButtonForItem);
+      return;
+    }
+    ah.core.dom.qsa(ah.sites.amazon.selectors.productLinkWithinItem, orderCardEl).forEach((titleLink) => {
+      const itemEl = titleLink.closest("div, li, article") || orderCardEl;
+      ensureCopyButtonForItem(itemEl);
+    });
   }
 
   async function openInvoices(orderCardEl, button) {
@@ -88,7 +118,6 @@
       class: "ah-amz-order-row",
       "data-ah-amazon-helper": "true"
     });
-    const copyButton = button("Copy title", "ah-amz-copy-title ah-button-secondary", "Copy the primary Amazon product title, including quantity when available.", (btn) => copyTitle(orderCardEl, btn));
     const stageButton = button("Stage for Wave", "ah-amz-stage-wave", "Stage this Amazon order so it can enrich an existing imported Wave transaction.", (btn) => {
       const old = btn.textContent;
       btn.disabled = true;
@@ -100,7 +129,7 @@
     });
     const openButton = button("Open invoice", "ah-amz-open-invoice ah-button-secondary", "Open invoice PDF(s) for this order in new tabs.", (btn) => openInvoices(orderCardEl, btn));
     const downloadButton = button("Open & download invoice", "ah-amz-download-invoice ah-button-secondary", "Open the single invoice in a focused tab and attempt to download it.", (btn) => openAndDownloadInvoice(orderCardEl, btn));
-    row.append(copyButton, stageButton, openButton, downloadButton);
+    row.append(stageButton, openButton, downloadButton);
 
     const insertAfter = header && orderCardEl.contains(header) ? header : null;
     if (insertAfter?.parentElement) {
@@ -121,7 +150,10 @@
   function ensure() {
     if (!ah.sites.amazon.detect.isOrdersPage()) return;
     ah.ui.styles.ensureStyles();
-    ah.sites.amazon.extractOrder.findOrderCards(document).forEach(ensureOrderCard);
+    ah.sites.amazon.extractOrder.findOrderCards(document).forEach((orderCard) => {
+      ensureOrderCard(orderCard);
+      ensureCopyButtons(orderCard);
+    });
   }
 
   function diagnostics() {
