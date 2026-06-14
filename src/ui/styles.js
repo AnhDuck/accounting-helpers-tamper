@@ -414,12 +414,22 @@
         color: #17442a;
       }
       .ah-amz-open-invoice:hover { background: #c9f0da; }
+      .ah-amz-apply-wave {
+        background: #b43232;
+        border-color: #922929;
+        color: #fff;
+      }
+      .ah-amz-apply-wave:hover { background: #9f2d2d; }
       .ah-amz-download-invoice {
         background: #fde2e2;
         border-color: #e5a1a1;
         color: #6f1d1d;
       }
       .ah-amz-download-invoice:hover { background: #fbd0d0; }
+      .ah-amz-invoice-note {
+        color: #5b7077;
+        font: 12px/1.35 system-ui, sans-serif;
+      }
       .ah-amazon-to-wave-modal-actions {
         align-items: start;
         background: #f6fafb;

@@ -4,8 +4,12 @@
   ah.features.amazonToWave = ah.features.amazonToWave || {};
 
   const pendingKey = ah.core.constants.storageKeys.aliPendingPayload;
+  const applyRequestKey = ah.core.constants.storageKeys.amazonApplyRequest;
   const modalActionsClass = "ah-amazon-to-wave-modal-actions";
   const bannerId = "ah-amazon-to-wave-banner";
+  const APPLY_REQUEST_MAX_AGE_MS = 20000;
+  let applyRequestListenerInstalled = false;
+  let lastHandledApplyRequestId = "";
 
   function pendingPayload() {
     const payload = ah.core.storage.get(pendingKey, null);
@@ -26,14 +30,23 @@
     return String(value || "").replace(/\s+/g, " ").trim();
   }
 
+  function maxDescriptionChars(payload) {
+    return Number(payload?.description?.maxChars || ah.features.amazonToWave.payload?.WAVE_DESCRIPTION_MAX_CHARS || 255);
+  }
+
+  function truncateDescription(value, payload) {
+    const text = normalize(value);
+    const maxChars = maxDescriptionChars(payload);
+    return text.length > maxChars ? text.slice(0, maxChars) : text;
+  }
+
   function formatDescription(existing, payload) {
     const base = normalize(existing) || payload.description?.originalMerchant || "Amazon";
     const title = normalize(primaryTitle(payload));
-    if (!title) return base;
+    if (!title) return truncateDescription(base, payload);
     const lowerBase = base.toLowerCase();
-    if (lowerBase.includes(title.toLowerCase()) || lowerBase.includes(String(payload.orderId || "").toLowerCase())) return base;
-    const productPrefix = payload.products?.length > 1 ? `${payload.products.length} items | ${title}` : title;
-    return `${base} | ${productPrefix}`;
+    if (lowerBase.includes(title.toLowerCase()) || lowerBase.includes(String(payload.orderId || "").toLowerCase())) return truncateDescription(base, payload);
+    return truncateDescription(`${base} | ${title}`, payload);
   }
 
   function amountWarning(payload) {
@@ -117,6 +130,48 @@
     });
     ah.ui.toast.show(result.message, { tone: warnings.length ? "warn" : "success" });
     return result;
+  }
+
+  function isFreshApplyRequest(request) {
+    return !!(
+      request &&
+      request.id &&
+      request.orderId &&
+      Number.isFinite(Number(request.createdAt)) &&
+      Date.now() - Number(request.createdAt) <= APPLY_REQUEST_MAX_AGE_MS
+    );
+  }
+
+  async function waitForMatchingPendingPayload(orderId) {
+    try {
+      return await ah.core.dom.waitFor(() => {
+        const payload = pendingPayload();
+        return payload?.orderId === orderId ? payload : null;
+      }, { timeout: 1500, interval: 50 });
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function handleApplyRequest(request) {
+    if (!ah.sites.wave.detect.isWave() || !isFreshApplyRequest(request)) return;
+    if (request.id === lastHandledApplyRequestId) return;
+    lastHandledApplyRequestId = request.id;
+    const payload = await waitForMatchingPendingPayload(request.orderId);
+    if (!payload) {
+      ah.ui.toast.show("Amazon apply request received, but the staged order was not available in Wave.", { tone: "warn" });
+      return;
+    }
+    await applyIntoOpenTransaction(payload, { applyTaxes: !!request.applyTaxes });
+  }
+
+  function installApplyRequestListener() {
+    if (applyRequestListenerInstalled || typeof ah.core.storage.onChange !== "function") return;
+    applyRequestListenerInstalled = true;
+    ah.core.storage.onChange(applyRequestKey, (request) => {
+      handleApplyRequest(request);
+    });
+    handleApplyRequest(ah.core.storage.get(applyRequestKey, null));
   }
 
   function removeModalActions() {
@@ -219,6 +274,7 @@
 
   function ensureWaveApplyUI() {
     if (!ah.sites.wave.detect.isWave()) return;
+    installApplyRequestListener();
     const payload = pendingPayload();
     if (!payload || document.getElementById("ah-settings-modal")) {
       ah.ui.floatingPanel.remove(bannerId);

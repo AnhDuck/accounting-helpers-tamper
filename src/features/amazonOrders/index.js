@@ -83,17 +83,32 @@
     try {
       const info = await ah.sites.amazon.invoices.fetchInvoiceInfo(orderCardEl);
       const urls = info?.invoiceUrls || [];
-      if (urls.length !== 1) {
-        button.textContent = urls.length ? "Not single" : "No invoices";
+      if (!urls.length) {
+        button.textContent = "No invoices";
         await new Promise((resolve) => setTimeout(resolve, 1000));
         return;
       }
-      ah.sites.amazon.invoices.openTab(urls[0], true);
-      ah.sites.amazon.invoices.downloadInvoice(urls[0], info?.orderId || ah.sites.amazon.extractOrder.extractOrderId(orderCardEl));
-      button.textContent = "Done";
+      urls.forEach((url, index) => {
+        ah.sites.amazon.invoices.openTab(url, index === 0);
+        const orderId = info?.orderId || ah.sites.amazon.extractOrder.extractOrderId(orderCardEl);
+        ah.sites.amazon.invoices.downloadInvoice(url, urls.length > 1 ? `${orderId}_${index + 1}` : orderId);
+      });
+      button.textContent = urls.length === 1 ? "Done" : `Done ${urls.length}`;
       await new Promise((resolve) => setTimeout(resolve, 900));
     } finally {
       button.textContent = oldText;
+      button.disabled = false;
+    }
+  }
+
+  async function stageOrderFromButton(orderCardEl, button, options) {
+    const old = button.textContent;
+    button.disabled = true;
+    button.textContent = options?.applyInWave ? "Applying..." : "Staging...";
+    try {
+      await ah.features.amazonToWave.stageFromAmazon.stageOrder(orderCardEl, options);
+    } finally {
+      button.textContent = old;
       button.disabled = false;
     }
   }
@@ -118,18 +133,9 @@
       class: "ah-amz-order-row",
       "data-ah-amazon-helper": "true"
     });
-    const stageButton = button("Stage for Wave", "ah-amz-stage-wave", "Stage this Amazon order so it can enrich an existing imported Wave transaction.", (btn) => {
-      const old = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = "Staging...";
-      ah.features.amazonToWave.stageFromAmazon.stageOrder(orderCardEl).finally(() => {
-        btn.textContent = old;
-        btn.disabled = false;
-      });
-    });
-    const openButton = button("Open invoice", "ah-amz-open-invoice ah-button-secondary", "Open invoice PDF(s) for this order in new tabs.", (btn) => openInvoices(orderCardEl, btn));
-    const downloadButton = button("Open & download invoice", "ah-amz-download-invoice ah-button-secondary", "Open the single invoice in a focused tab and attempt to download it.", (btn) => openAndDownloadInvoice(orderCardEl, btn));
-    row.append(stageButton, openButton, downloadButton);
+    const loadingButton = button("Checking invoices...", "ah-amz-open-invoice ah-button-secondary", "Checking invoice count before enabling Wave actions.", () => {});
+    loadingButton.disabled = true;
+    row.append(loadingButton);
 
     const insertAfter = header && orderCardEl.contains(header) ? header : null;
     if (insertAfter?.parentElement) {
@@ -141,9 +147,32 @@
     ah.sites.amazon.invoices.fetchInvoiceInfo(orderCardEl).then((info) => {
       if (!row.isConnected) return;
       const count = info?.invoiceUrls?.length || 0;
-      openButton.textContent = count === 1 ? "Open invoice" : "Open all invoices";
-      downloadButton.hidden = count !== 1;
       row.dataset.ahInvoiceCount = String(count);
+      row.replaceChildren();
+      if (count === 1) {
+        row.append(
+          button("Stage for Wave", "ah-amz-stage-wave", "Stage this Amazon order so it can enrich an existing imported Wave transaction.", (btn) => {
+            stageOrderFromButton(orderCardEl, btn, { requireSingleInvoice: true });
+          }),
+          button("Apply in Wave + tax", "ah-amz-apply-wave", "Stage this Amazon order, then apply Amazon details and GST + PST in the open Wave transaction.", (btn) => {
+            stageOrderFromButton(orderCardEl, btn, { requireSingleInvoice: true, applyInWave: true, applyTaxes: true });
+          }),
+          button("Open invoice", "ah-amz-open-invoice ah-button-secondary", "Open the invoice PDF for this order in a new tab.", (btn) => openInvoices(orderCardEl, btn)),
+          button("Open & download invoice", "ah-amz-download-invoice ah-button-secondary", "Open the invoice in a focused tab and attempt to download it.", (btn) => openAndDownloadInvoice(orderCardEl, btn))
+        );
+        return;
+      }
+      if (count > 1) {
+        row.append(
+          button("Open all invoices", "ah-amz-open-invoice ah-button-secondary", "Open all invoice PDFs for this order in new tabs.", (btn) => openInvoices(orderCardEl, btn)),
+          button("Open & download invoices", "ah-amz-download-invoice ah-button-secondary", "Open and attempt to download all invoices for this order.", (btn) => openAndDownloadInvoice(orderCardEl, btn)),
+          ah.core.dom.el("span", { class: "ah-amz-invoice-note" }, "Multiple invoices detected. Enter each invoice separately.")
+        );
+        return;
+      }
+      const noInvoicesButton = button("No invoices", "ah-amz-open-invoice ah-button-secondary", "No invoice links were found for this order.", () => {});
+      noInvoicesButton.disabled = true;
+      row.append(noInvoicesButton);
     });
   }
 
@@ -176,6 +205,7 @@
       buttons: {
         copyTitleInjected: !!document.querySelector(".ah-amz-copy-title"),
         stageForWaveInjected: !!document.querySelector(".ah-amz-stage-wave"),
+        applyInWaveInjected: !!document.querySelector(".ah-amz-apply-wave"),
         invoiceButtonsInjected: !!document.querySelector(".ah-amz-open-invoice")
       },
       errors: [],

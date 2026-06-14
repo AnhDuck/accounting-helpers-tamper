@@ -87,7 +87,9 @@
         metaKey: keys.settingsMeta,
         metaExists: keyExists(keys.settingsMeta),
         pendingPayloadKey: keys.aliPendingPayload,
-        pendingPayloadExists: keyExists(keys.aliPendingPayload)
+        pendingPayloadExists: keyExists(keys.aliPendingPayload),
+        amazonApplyRequestKey: keys.amazonApplyRequest,
+        amazonApplyRequestExists: keyExists(keys.amazonApplyRequest)
       },
       listedKeys: typeof ah.core.storage.keys === "function" ? ah.core.storage.keys() : []
     };
@@ -458,6 +460,10 @@
     return ah.features.amazonToWave.stageFromAmazon.stageFakeAmazonOrder();
   }
 
+  function stageFakeAmazonOrderAndApply() {
+    return ah.features.amazonToWave.stageFromAmazon.stageFakeAmazonOrderAndApply?.({ applyTaxes: true });
+  }
+
   function clearPendingPayload() {
     ah.features.aliToWave.stageFromAliExpress?.clearPendingPayload?.();
   }
@@ -560,6 +566,15 @@
           ah.core.dom.el("button", {
             type: "button",
             class: "ah-button ah-button-secondary",
+            title: "Stage a fake Amazon payload and request the open Wave tab to apply Amazon details plus GST/PST.",
+            onclick: async () => {
+              await stageFakeAmazonOrderAndApply();
+              await runAndRender();
+            }
+          }, "Stage fake Amazon + auto apply"),
+          ah.core.dom.el("button", {
+            type: "button",
+            class: "ah-button ah-button-secondary",
             onclick: async () => {
               clearPendingPayload();
               await runAndRender();
@@ -640,6 +655,7 @@
       return lastDiagnostics;
     },
     stageFakeAliExpressOrder,
-    stageFakeAmazonOrder
+    stageFakeAmazonOrder,
+    stageFakeAmazonOrderAndApply
   };
 })();

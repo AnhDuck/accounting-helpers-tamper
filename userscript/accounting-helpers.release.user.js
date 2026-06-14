@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Accounting Helpers
 // @namespace    https://github.com/AnhDuck/accounting-helpers-tamper
-// @version      0.1.26
+// @version      0.1.27
 // @description  Modular accounting workflow helpers for WaveApps, AliExpress, and future sites.
 // @match        https://next.waveapps.com/*
 // @match        https://www.aliexpress.com/p/order/index.html*
@@ -36,7 +36,7 @@
   ah.core = ah.core || {};
 
   ah.core.constants = {
-    version: "0.1.26",
+    version: "0.1.27",
     namespace: "accountingHelpers",
     storageKeys: {
       settings: "accountingHelpers.settings",
@@ -48,7 +48,8 @@
       aliPendingPayload: "aliToWave.pendingPayload",
       aliImportedOrderIds: "aliToWave.importedOrderIds",
       waveHeartbeat: "wave.heartbeat",
-      wavePresenceRequest: "wave.presenceRequest"
+      wavePresenceRequest: "wave.presenceRequest",
+      amazonApplyRequest: "amazonToWave.applyRequest"
     },
     events: {
       settingsChanged: "accounting-helpers:settings-changed",
@@ -1227,12 +1228,22 @@
         color: #17442a;
       }
       .ah-amz-open-invoice:hover { background: #c9f0da; }
+      .ah-amz-apply-wave {
+        background: #b43232;
+        border-color: #922929;
+        color: #fff;
+      }
+      .ah-amz-apply-wave:hover { background: #9f2d2d; }
       .ah-amz-download-invoice {
         background: #fde2e2;
         border-color: #e5a1a1;
         color: #6f1d1d;
       }
       .ah-amz-download-invoice:hover { background: #fbd0d0; }
+      .ah-amz-invoice-note {
+        color: #5b7077;
+        font: 12px/1.35 system-ui, sans-serif;
+      }
       .ah-amazon-to-wave-modal-actions {
         align-items: start;
         background: #f6fafb;
@@ -4676,14 +4687,54 @@
   ah.features.amazonToWave = ah.features.amazonToWave || {};
 
   const AMAZON_TO_WAVE_PAYLOAD_VERSION = 1;
+  const WAVE_DESCRIPTION_MAX_CHARS = 255;
+
+  function normalize(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function truncate(value, maxChars) {
+    const text = normalize(value);
+    if (!Number.isFinite(maxChars) || maxChars <= 0) return "";
+    return text.length > maxChars ? text.slice(0, maxChars) : text;
+  }
+
+  function productLabel(product) {
+    const title = normalize(product?.title);
+    if (!title) return "";
+    const qty = Number(product?.qty);
+    return qty > 1 ? `${qty}x ${title}` : title;
+  }
+
+  function productTitleSummary(order, prefixChars) {
+    const products = Array.isArray(order?.products) ? order.products : [];
+    const separator = " | ";
+    const maxChars = WAVE_DESCRIPTION_MAX_CHARS - Number(prefixChars || 0);
+    let summary = "";
+    for (const product of products) {
+      const label = productLabel(product);
+      if (!label) continue;
+      const next = summary ? `${summary}${separator}${label}` : label;
+      if (next.length <= maxChars) {
+        summary = next;
+        continue;
+      }
+      const remaining = maxChars - summary.length - (summary ? separator.length : 0);
+      if (remaining > 0) summary = summary ? `${summary}${separator}${truncate(label, remaining)}` : truncate(label, maxChars);
+      break;
+    }
+    return truncate(summary, maxChars);
+  }
 
   function createSuggestedDescription(order) {
-    const productTitle = ah.sites.amazon.extractOrder.primaryProductTitle(order);
     const originalMerchant = "AMAZONCOM PAYMENTS-CA";
+    const productTitle = productTitleSummary(order, originalMerchant.length + 3);
+    const suggested = productTitle ? `${originalMerchant} | ${productTitle}` : originalMerchant;
     return {
       originalMerchant,
       productTitle,
-      suggested: productTitle ? `${originalMerchant} | ${productTitle}` : originalMerchant
+      suggested: truncate(suggested, WAVE_DESCRIPTION_MAX_CHARS),
+      maxChars: WAVE_DESCRIPTION_MAX_CHARS
     };
   }
 
@@ -4740,7 +4791,8 @@
       description: {
         originalMerchant: "AMAZONCOM PAYMENTS-CA",
         productTitle: title,
-        suggested: `AMAZONCOM PAYMENTS-CA | ${title}`
+        suggested: `AMAZONCOM PAYMENTS-CA | ${title}`,
+        maxChars: WAVE_DESCRIPTION_MAX_CHARS
       },
       products: [
         {
@@ -4760,6 +4812,7 @@
 
   ah.features.amazonToWave.payload = {
     AMAZON_TO_WAVE_PAYLOAD_VERSION,
+    WAVE_DESCRIPTION_MAX_CHARS,
     createAmazonToWavePayload,
     isValidPayload,
     fakePayload
@@ -4774,6 +4827,7 @@
   ah.features.amazonToWave = ah.features.amazonToWave || {};
 
   const pendingKey = ah.core.constants.storageKeys.aliPendingPayload;
+  const applyRequestKey = ah.core.constants.storageKeys.amazonApplyRequest;
 
   function pendingPayload() {
     return ah.core.storage.get(pendingKey, null);
@@ -4803,7 +4857,17 @@
     return true;
   }
 
-  async function stageOrder(orderCardEl) {
+  function requestApplyInWave(payload, options) {
+    const request = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      orderId: payload.orderId,
+      createdAt: Date.now(),
+      applyTaxes: !!options?.applyTaxes
+    };
+    return ah.core.storage.set(applyRequestKey, request);
+  }
+
+  async function stageOrder(orderCardEl, options) {
     const order = await ah.sites.amazon.extractOrder.extractOrder(orderCardEl);
     if (!order.orderId) {
       ah.ui.toast.show("Could not find the Amazon order ID on this order card.", { tone: "warn" });
@@ -4813,12 +4877,26 @@
       ah.ui.toast.show("Could not find the Amazon order total on this order card.", { tone: "warn" });
       return null;
     }
+    if (options?.requireSingleInvoice !== false && Number(order.invoice?.count || 0) !== 1) {
+      ah.ui.toast.show("Multiple or missing Amazon invoices detected. Open invoices and enter each one separately.", { tone: "warn" });
+      return null;
+    }
     const payload = ah.features.amazonToWave.payload.createAmazonToWavePayload(order);
     if (!savePendingPayload(payload)) {
       ah.ui.toast.show("Could not stage this Amazon order for Wave.", { tone: "error" });
       return null;
     }
-    if (await isWaveOpen()) {
+    const waveOpen = await isWaveOpen();
+    if (options?.applyInWave) {
+      if (waveOpen && requestApplyInWave(payload, options)) {
+        ah.ui.toast.show(`Amazon order ${payload.orderId} staged. Applying in the open Wave transaction...`);
+      } else if (waveOpen) {
+        ah.ui.toast.show("Amazon order staged, but could not request Wave auto-apply.", { tone: "warn" });
+      } else {
+        ah.ui.toast.show("Amazon order staged. Open the matching Wave transaction to apply details + tax.");
+        openWaveTransactions();
+      }
+    } else if (waveOpen) {
       ah.ui.toast.show(`Amazon order ${payload.orderId} staged. Open the matching imported Wave transaction, then apply details.`);
     } else {
       ah.ui.toast.show("Amazon order staged. Opening Wave transactions...");
@@ -4834,12 +4912,34 @@
     return ok ? payload : null;
   }
 
+  async function stageFakeAmazonOrderAndApply(options) {
+    const payload = ah.features.amazonToWave.payload.fakePayload();
+    const ok = savePendingPayload(payload);
+    if (!ok) {
+      ah.ui.toast.show("Could not stage fake Amazon order for Wave testing.", { tone: "error" });
+      return null;
+    }
+    const waveOpen = await isWaveOpen();
+    if (!waveOpen) {
+      ah.ui.toast.show("Staged fake Amazon order. Open Wave to test auto-apply.", { tone: "warn" });
+      return payload;
+    }
+    if (!requestApplyInWave(payload, { applyTaxes: options?.applyTaxes !== false })) {
+      ah.ui.toast.show("Staged fake Amazon order, but could not request Wave auto-apply.", { tone: "warn" });
+      return payload;
+    }
+    ah.ui.toast.show("Staged fake Amazon order and requested Wave auto-apply.");
+    return payload;
+  }
+
   ah.features.amazonToWave.stageFromAmazon = {
     pendingPayload,
     clearPendingPayload,
     savePendingPayload,
     stageOrder,
-    stageFakeAmazonOrder
+    requestApplyInWave,
+    stageFakeAmazonOrder,
+    stageFakeAmazonOrderAndApply
   };
 })();
 
@@ -4851,8 +4951,12 @@
   ah.features.amazonToWave = ah.features.amazonToWave || {};
 
   const pendingKey = ah.core.constants.storageKeys.aliPendingPayload;
+  const applyRequestKey = ah.core.constants.storageKeys.amazonApplyRequest;
   const modalActionsClass = "ah-amazon-to-wave-modal-actions";
   const bannerId = "ah-amazon-to-wave-banner";
+  const APPLY_REQUEST_MAX_AGE_MS = 20000;
+  let applyRequestListenerInstalled = false;
+  let lastHandledApplyRequestId = "";
 
   function pendingPayload() {
     const payload = ah.core.storage.get(pendingKey, null);
@@ -4873,14 +4977,23 @@
     return String(value || "").replace(/\s+/g, " ").trim();
   }
 
+  function maxDescriptionChars(payload) {
+    return Number(payload?.description?.maxChars || ah.features.amazonToWave.payload?.WAVE_DESCRIPTION_MAX_CHARS || 255);
+  }
+
+  function truncateDescription(value, payload) {
+    const text = normalize(value);
+    const maxChars = maxDescriptionChars(payload);
+    return text.length > maxChars ? text.slice(0, maxChars) : text;
+  }
+
   function formatDescription(existing, payload) {
     const base = normalize(existing) || payload.description?.originalMerchant || "Amazon";
     const title = normalize(primaryTitle(payload));
-    if (!title) return base;
+    if (!title) return truncateDescription(base, payload);
     const lowerBase = base.toLowerCase();
-    if (lowerBase.includes(title.toLowerCase()) || lowerBase.includes(String(payload.orderId || "").toLowerCase())) return base;
-    const productPrefix = payload.products?.length > 1 ? `${payload.products.length} items | ${title}` : title;
-    return `${base} | ${productPrefix}`;
+    if (lowerBase.includes(title.toLowerCase()) || lowerBase.includes(String(payload.orderId || "").toLowerCase())) return truncateDescription(base, payload);
+    return truncateDescription(`${base} | ${title}`, payload);
   }
 
   function amountWarning(payload) {
@@ -4964,6 +5077,48 @@
     });
     ah.ui.toast.show(result.message, { tone: warnings.length ? "warn" : "success" });
     return result;
+  }
+
+  function isFreshApplyRequest(request) {
+    return !!(
+      request &&
+      request.id &&
+      request.orderId &&
+      Number.isFinite(Number(request.createdAt)) &&
+      Date.now() - Number(request.createdAt) <= APPLY_REQUEST_MAX_AGE_MS
+    );
+  }
+
+  async function waitForMatchingPendingPayload(orderId) {
+    try {
+      return await ah.core.dom.waitFor(() => {
+        const payload = pendingPayload();
+        return payload?.orderId === orderId ? payload : null;
+      }, { timeout: 1500, interval: 50 });
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function handleApplyRequest(request) {
+    if (!ah.sites.wave.detect.isWave() || !isFreshApplyRequest(request)) return;
+    if (request.id === lastHandledApplyRequestId) return;
+    lastHandledApplyRequestId = request.id;
+    const payload = await waitForMatchingPendingPayload(request.orderId);
+    if (!payload) {
+      ah.ui.toast.show("Amazon apply request received, but the staged order was not available in Wave.", { tone: "warn" });
+      return;
+    }
+    await applyIntoOpenTransaction(payload, { applyTaxes: !!request.applyTaxes });
+  }
+
+  function installApplyRequestListener() {
+    if (applyRequestListenerInstalled || typeof ah.core.storage.onChange !== "function") return;
+    applyRequestListenerInstalled = true;
+    ah.core.storage.onChange(applyRequestKey, (request) => {
+      handleApplyRequest(request);
+    });
+    handleApplyRequest(ah.core.storage.get(applyRequestKey, null));
   }
 
   function removeModalActions() {
@@ -5066,6 +5221,7 @@
 
   function ensureWaveApplyUI() {
     if (!ah.sites.wave.detect.isWave()) return;
+    installApplyRequestListener();
     const payload = pendingPayload();
     if (!payload || document.getElementById("ah-settings-modal")) {
       ah.ui.floatingPanel.remove(bannerId);
@@ -5178,17 +5334,32 @@
     try {
       const info = await ah.sites.amazon.invoices.fetchInvoiceInfo(orderCardEl);
       const urls = info?.invoiceUrls || [];
-      if (urls.length !== 1) {
-        button.textContent = urls.length ? "Not single" : "No invoices";
+      if (!urls.length) {
+        button.textContent = "No invoices";
         await new Promise((resolve) => setTimeout(resolve, 1000));
         return;
       }
-      ah.sites.amazon.invoices.openTab(urls[0], true);
-      ah.sites.amazon.invoices.downloadInvoice(urls[0], info?.orderId || ah.sites.amazon.extractOrder.extractOrderId(orderCardEl));
-      button.textContent = "Done";
+      urls.forEach((url, index) => {
+        ah.sites.amazon.invoices.openTab(url, index === 0);
+        const orderId = info?.orderId || ah.sites.amazon.extractOrder.extractOrderId(orderCardEl);
+        ah.sites.amazon.invoices.downloadInvoice(url, urls.length > 1 ? `${orderId}_${index + 1}` : orderId);
+      });
+      button.textContent = urls.length === 1 ? "Done" : `Done ${urls.length}`;
       await new Promise((resolve) => setTimeout(resolve, 900));
     } finally {
       button.textContent = oldText;
+      button.disabled = false;
+    }
+  }
+
+  async function stageOrderFromButton(orderCardEl, button, options) {
+    const old = button.textContent;
+    button.disabled = true;
+    button.textContent = options?.applyInWave ? "Applying..." : "Staging...";
+    try {
+      await ah.features.amazonToWave.stageFromAmazon.stageOrder(orderCardEl, options);
+    } finally {
+      button.textContent = old;
       button.disabled = false;
     }
   }
@@ -5213,18 +5384,9 @@
       class: "ah-amz-order-row",
       "data-ah-amazon-helper": "true"
     });
-    const stageButton = button("Stage for Wave", "ah-amz-stage-wave", "Stage this Amazon order so it can enrich an existing imported Wave transaction.", (btn) => {
-      const old = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = "Staging...";
-      ah.features.amazonToWave.stageFromAmazon.stageOrder(orderCardEl).finally(() => {
-        btn.textContent = old;
-        btn.disabled = false;
-      });
-    });
-    const openButton = button("Open invoice", "ah-amz-open-invoice ah-button-secondary", "Open invoice PDF(s) for this order in new tabs.", (btn) => openInvoices(orderCardEl, btn));
-    const downloadButton = button("Open & download invoice", "ah-amz-download-invoice ah-button-secondary", "Open the single invoice in a focused tab and attempt to download it.", (btn) => openAndDownloadInvoice(orderCardEl, btn));
-    row.append(stageButton, openButton, downloadButton);
+    const loadingButton = button("Checking invoices...", "ah-amz-open-invoice ah-button-secondary", "Checking invoice count before enabling Wave actions.", () => {});
+    loadingButton.disabled = true;
+    row.append(loadingButton);
 
     const insertAfter = header && orderCardEl.contains(header) ? header : null;
     if (insertAfter?.parentElement) {
@@ -5236,9 +5398,32 @@
     ah.sites.amazon.invoices.fetchInvoiceInfo(orderCardEl).then((info) => {
       if (!row.isConnected) return;
       const count = info?.invoiceUrls?.length || 0;
-      openButton.textContent = count === 1 ? "Open invoice" : "Open all invoices";
-      downloadButton.hidden = count !== 1;
       row.dataset.ahInvoiceCount = String(count);
+      row.replaceChildren();
+      if (count === 1) {
+        row.append(
+          button("Stage for Wave", "ah-amz-stage-wave", "Stage this Amazon order so it can enrich an existing imported Wave transaction.", (btn) => {
+            stageOrderFromButton(orderCardEl, btn, { requireSingleInvoice: true });
+          }),
+          button("Apply in Wave + tax", "ah-amz-apply-wave", "Stage this Amazon order, then apply Amazon details and GST + PST in the open Wave transaction.", (btn) => {
+            stageOrderFromButton(orderCardEl, btn, { requireSingleInvoice: true, applyInWave: true, applyTaxes: true });
+          }),
+          button("Open invoice", "ah-amz-open-invoice ah-button-secondary", "Open the invoice PDF for this order in a new tab.", (btn) => openInvoices(orderCardEl, btn)),
+          button("Open & download invoice", "ah-amz-download-invoice ah-button-secondary", "Open the invoice in a focused tab and attempt to download it.", (btn) => openAndDownloadInvoice(orderCardEl, btn))
+        );
+        return;
+      }
+      if (count > 1) {
+        row.append(
+          button("Open all invoices", "ah-amz-open-invoice ah-button-secondary", "Open all invoice PDFs for this order in new tabs.", (btn) => openInvoices(orderCardEl, btn)),
+          button("Open & download invoices", "ah-amz-download-invoice ah-button-secondary", "Open and attempt to download all invoices for this order.", (btn) => openAndDownloadInvoice(orderCardEl, btn)),
+          ah.core.dom.el("span", { class: "ah-amz-invoice-note" }, "Multiple invoices detected. Enter each invoice separately.")
+        );
+        return;
+      }
+      const noInvoicesButton = button("No invoices", "ah-amz-open-invoice ah-button-secondary", "No invoice links were found for this order.", () => {});
+      noInvoicesButton.disabled = true;
+      row.append(noInvoicesButton);
     });
   }
 
@@ -5271,6 +5456,7 @@
       buttons: {
         copyTitleInjected: !!document.querySelector(".ah-amz-copy-title"),
         stageForWaveInjected: !!document.querySelector(".ah-amz-stage-wave"),
+        applyInWaveInjected: !!document.querySelector(".ah-amz-apply-wave"),
         invoiceButtonsInjected: !!document.querySelector(".ah-amz-open-invoice")
       },
       errors: [],
@@ -5372,7 +5558,9 @@
         metaKey: keys.settingsMeta,
         metaExists: keyExists(keys.settingsMeta),
         pendingPayloadKey: keys.aliPendingPayload,
-        pendingPayloadExists: keyExists(keys.aliPendingPayload)
+        pendingPayloadExists: keyExists(keys.aliPendingPayload),
+        amazonApplyRequestKey: keys.amazonApplyRequest,
+        amazonApplyRequestExists: keyExists(keys.amazonApplyRequest)
       },
       listedKeys: typeof ah.core.storage.keys === "function" ? ah.core.storage.keys() : []
     };
@@ -5743,6 +5931,10 @@
     return ah.features.amazonToWave.stageFromAmazon.stageFakeAmazonOrder();
   }
 
+  function stageFakeAmazonOrderAndApply() {
+    return ah.features.amazonToWave.stageFromAmazon.stageFakeAmazonOrderAndApply?.({ applyTaxes: true });
+  }
+
   function clearPendingPayload() {
     ah.features.aliToWave.stageFromAliExpress?.clearPendingPayload?.();
   }
@@ -5845,6 +6037,15 @@
           ah.core.dom.el("button", {
             type: "button",
             class: "ah-button ah-button-secondary",
+            title: "Stage a fake Amazon payload and request the open Wave tab to apply Amazon details plus GST/PST.",
+            onclick: async () => {
+              await stageFakeAmazonOrderAndApply();
+              await runAndRender();
+            }
+          }, "Stage fake Amazon + auto apply"),
+          ah.core.dom.el("button", {
+            type: "button",
+            class: "ah-button ah-button-secondary",
             onclick: async () => {
               clearPendingPayload();
               await runAndRender();
@@ -5925,7 +6126,8 @@
       return lastDiagnostics;
     },
     stageFakeAliExpressOrder,
-    stageFakeAmazonOrder
+    stageFakeAmazonOrder,
+    stageFakeAmazonOrderAndApply
   };
 })();
 

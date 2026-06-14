@@ -4,14 +4,54 @@
   ah.features.amazonToWave = ah.features.amazonToWave || {};
 
   const AMAZON_TO_WAVE_PAYLOAD_VERSION = 1;
+  const WAVE_DESCRIPTION_MAX_CHARS = 255;
+
+  function normalize(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function truncate(value, maxChars) {
+    const text = normalize(value);
+    if (!Number.isFinite(maxChars) || maxChars <= 0) return "";
+    return text.length > maxChars ? text.slice(0, maxChars) : text;
+  }
+
+  function productLabel(product) {
+    const title = normalize(product?.title);
+    if (!title) return "";
+    const qty = Number(product?.qty);
+    return qty > 1 ? `${qty}x ${title}` : title;
+  }
+
+  function productTitleSummary(order, prefixChars) {
+    const products = Array.isArray(order?.products) ? order.products : [];
+    const separator = " | ";
+    const maxChars = WAVE_DESCRIPTION_MAX_CHARS - Number(prefixChars || 0);
+    let summary = "";
+    for (const product of products) {
+      const label = productLabel(product);
+      if (!label) continue;
+      const next = summary ? `${summary}${separator}${label}` : label;
+      if (next.length <= maxChars) {
+        summary = next;
+        continue;
+      }
+      const remaining = maxChars - summary.length - (summary ? separator.length : 0);
+      if (remaining > 0) summary = summary ? `${summary}${separator}${truncate(label, remaining)}` : truncate(label, maxChars);
+      break;
+    }
+    return truncate(summary, maxChars);
+  }
 
   function createSuggestedDescription(order) {
-    const productTitle = ah.sites.amazon.extractOrder.primaryProductTitle(order);
     const originalMerchant = "AMAZONCOM PAYMENTS-CA";
+    const productTitle = productTitleSummary(order, originalMerchant.length + 3);
+    const suggested = productTitle ? `${originalMerchant} | ${productTitle}` : originalMerchant;
     return {
       originalMerchant,
       productTitle,
-      suggested: productTitle ? `${originalMerchant} | ${productTitle}` : originalMerchant
+      suggested: truncate(suggested, WAVE_DESCRIPTION_MAX_CHARS),
+      maxChars: WAVE_DESCRIPTION_MAX_CHARS
     };
   }
 
@@ -68,7 +108,8 @@
       description: {
         originalMerchant: "AMAZONCOM PAYMENTS-CA",
         productTitle: title,
-        suggested: `AMAZONCOM PAYMENTS-CA | ${title}`
+        suggested: `AMAZONCOM PAYMENTS-CA | ${title}`,
+        maxChars: WAVE_DESCRIPTION_MAX_CHARS
       },
       products: [
         {
@@ -88,6 +129,7 @@
 
   ah.features.amazonToWave.payload = {
     AMAZON_TO_WAVE_PAYLOAD_VERSION,
+    WAVE_DESCRIPTION_MAX_CHARS,
     createAmazonToWavePayload,
     isValidPayload,
     fakePayload
