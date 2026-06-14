@@ -17,7 +17,6 @@
       defaultAliExpressAccount: "",
       defaultAliExpressType: "Withdrawal",
       descriptionPrefix: "Ali | ",
-      autoUpdateTaxPopover: false,
       markReviewedAutoSave: false,
       accounts: {
         amex: "",

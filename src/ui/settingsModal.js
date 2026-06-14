@@ -92,12 +92,6 @@
 
   const waveHelperChecks = [
     {
-      path: "wave.autoUpdateTaxPopover",
-      label: "Update visible tax amount after tax changes",
-      title: "Keeps the Wave tax popover display aligned after the tax helper changes a transaction.",
-      help: "When a GST/PST helper changes tax, also refresh the amount shown in Wave's tax popover."
-    },
-    {
       path: "wave.markReviewedAutoSave",
       label: "Save after Mark as reviewed",
       title: "Only affects the explicit Mark as reviewed helper button.",

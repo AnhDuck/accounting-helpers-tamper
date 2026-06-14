@@ -114,12 +114,18 @@
     return setTaxInRowIndex(0, taxText);
   }
 
-  function clickUpdateIfEnabled() {
-    if (!ah.core.settings.get("wave.autoUpdateTaxPopover", false)) return;
+  async function commitTaxPopover() {
     const popover = getOpenPopover();
     const update = popover?.querySelector('[data-testid="popover-actions"] button.wv-button--primary') ||
       ah.core.dom.findByText(popover || document, "button, [role='button']", "Update");
-    update?.click?.();
+    if (!update) return false;
+    update.click();
+    try {
+      await ah.core.dom.waitFor(() => !getOpenPopover(), { timeout: 8000, interval: 50 });
+      return true;
+    } catch (_error) {
+      return !getOpenPopover();
+    }
   }
 
   function findWrapperForButton(button) {
@@ -144,9 +150,13 @@
         return;
       }
       ah.features.waveSavingsDashboard.addClicks(3, taxText === TAX_GST ? "GST" : "PST");
-      ah.ui.toast.show(`Applied ${taxText}.`);
       await sleep(120);
-      clickUpdateIfEnabled();
+      const committed = await commitTaxPopover();
+      if (!committed) {
+        ah.ui.toast.show(`Selected ${taxText}, but Wave did not confirm the update.`, { tone: "warn" });
+        return;
+      }
+      ah.ui.toast.show(`Applied ${taxText}.`);
     } catch (error) {
       ah.core.logger.error("Tax button failed", String(error));
       ah.ui.toast.show(`Error applying ${taxText}.`, { tone: "error" });
@@ -162,9 +172,10 @@
     await sleep(350);
     const pst = await ensureTaxPresent(wrapper, TAX_PST);
     if (!gst || !pst) return false;
-    ah.features.waveSavingsDashboard.addClicks(6, "COMBO");
     await sleep(120);
-    clickUpdateIfEnabled();
+    const committed = await commitTaxPopover();
+    if (!committed) return false;
+    ah.features.waveSavingsDashboard.addClicks(6, "COMBO");
     return true;
   }
 
@@ -248,22 +259,9 @@
     wrapper.insertAdjacentElement("afterend", row);
   }
 
-  function ensurePanelToggle() {
-    const panel = document.getElementById("ah-wave-panel");
-    if (!panel || panel.querySelector("[data-ah-auto-update]")) return;
-    const checkbox = ah.core.dom.el("input", { type: "checkbox", "data-ah-auto-update": "1" });
-    checkbox.checked = ah.core.settings.get("wave.autoUpdateTaxPopover", false);
-    checkbox.addEventListener("change", () => {
-      ah.core.settings.set("wave.autoUpdateTaxPopover", checkbox.checked, { source: "settings-modal" });
-      ah.ui.toast.show(`Auto Update ${checkbox.checked ? "ON" : "OFF"}.`);
-    });
-    panel.append(ah.core.dom.el("label", { class: "ah-check", style: "white-space:nowrap;" }, [checkbox, "Auto Update"]));
-  }
-
   function ensure() {
     if (!ah.sites.wave.detect.isWave()) return;
     ah.features.waveSavingsDashboard.ensure();
-    ensurePanelToggle();
     const wrappers = ah.core.dom.qsa(`.anchor-transaction__line-item--singleline__btn-wrapper:not([${injectedAttr}])`);
     wrappers.forEach((wrapper) => {
       wrapper.setAttribute(injectedAttr, "1");
