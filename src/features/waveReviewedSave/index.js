@@ -11,38 +11,97 @@
   }
 
   function findMarkReviewedButton(target) {
-    const button = target?.closest?.("button");
+    const button = target?.closest?.("button, [role='button'], [role='menuitem']");
     if (!button) return null;
     if (button.classList.contains("transactions-list-v2__details__mark-reviewed")) return button;
     return textIncludes(button, "Mark as reviewed") ? button : null;
   }
 
-  function findSaveButtonNear(markButton) {
-    const modal = markButton.closest(".wv-modal, [role='dialog']");
-    const scope = modal || document;
-    const footer = ah.core.dom.visible(ah.core.dom.qsa(".wv-modal__footer, footer, [data-testid*='footer']", scope))[0] || scope;
-    return footer.querySelector('button[aria-label="Save transaction"]') ||
-      ah.core.dom.findByText(footer, "button.wv-button--primary, button", "Save");
+  function isUnavailable(button) {
+    return button.disabled ||
+      button.getAttribute("aria-disabled") === "true" ||
+      button.getAttribute("disabled") !== null ||
+      button.classList.contains("disabled") ||
+      button.classList.contains("wv-button--disabled");
   }
 
-  async function autoSave(markButton) {
+  function isHelperUi(button) {
+    return !!button.closest("#ah-wave-panel, #ah-dev-status, #ah-diagnostics-panel, #ah-settings-modal, .ah-modal");
+  }
+
+  function isSaveButton(button) {
+    const ariaLabel = button.getAttribute("aria-label") || "";
+    if (/^save transaction$/i.test(ariaLabel.trim())) return true;
+    return ah.core.dom.text(button).trim().toLowerCase() === "save";
+  }
+
+  function modalNear(button) {
+    return ah.sites.wave.transactionModal.findOpenModal() ||
+      button?.closest?.(".wv-modal, [role='dialog']");
+  }
+
+  function buttonScopesNear(button) {
+    const root = modalNear(button) || document;
+    return [
+      ...ah.core.dom.visible(ah.core.dom.qsa(".wv-modal__footer, footer, [data-testid*='footer']", root)),
+      root
+    ];
+  }
+
+  function findSaveButtonNear(button) {
+    for (const scope of buttonScopesNear(button)) {
+      const button = ah.core.dom.visible(ah.core.dom.qsa("button, [role='button']", scope))
+        .find((candidate) => !isHelperUi(candidate) && isSaveButton(candidate) && !isUnavailable(candidate));
+      if (button) return button;
+    }
+    return null;
+  }
+
+  async function waitForModalClosed() {
+    try {
+      await ah.core.dom.waitFor(() => ah.sites.wave.transactionModal.findOpenModal() ? null : true, {
+        timeout: 3000,
+        interval: 100
+      });
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  async function clickSaveAfterReview(anchorButton, options) {
+    await new Promise((resolve) => setTimeout(resolve, options?.delayMs || 220));
+    const saveButton = await ah.core.dom.waitFor(() => {
+      return findSaveButtonNear(anchorButton);
+    }, { timeout: 4000, interval: 80 });
+    saveButton.click();
+    ah.features.waveSavingsDashboard.addClicks(options?.clicksSaved || 1, options?.action || "MARK_REVIEWED");
+    if (await waitForModalClosed()) {
+      ah.ui.toast.show("Saved after Mark as reviewed.");
+    } else {
+      ah.core.logger.warn("Save was clicked after mark reviewed, but the transaction modal stayed open");
+      ah.ui.toast.show("Clicked Save, but Wave left the modal open.", { tone: "warn" });
+    }
+  }
+
+  async function withReviewSaveLock(task, warningMessage) {
     if (!ah.core.settings.get("wave.markReviewedAutoSave", false)) return;
     if (inFlight) return;
     inFlight = true;
     try {
-      await new Promise((resolve) => setTimeout(resolve, 220));
-      const saveButton = await ah.core.dom.waitFor(() => {
-        const button = findSaveButtonNear(markButton);
-        return button && !button.disabled && button.getAttribute("aria-disabled") !== "true" ? button : null;
-      }, { timeout: 4000, interval: 80 });
-      saveButton.click();
-      ah.features.waveSavingsDashboard.addClicks(1, "MARK_REVIEWED");
-      ah.ui.toast.show("Saved after mark reviewed.");
+      await task();
     } catch (_error) {
-      ah.core.logger.warn("Save button did not become available after mark reviewed");
+      ah.core.logger.warn(warningMessage);
     } finally {
       setTimeout(() => { inFlight = false; }, 300);
     }
+  }
+
+  function autoSave(markButton) {
+    withReviewSaveLock(
+      () => clickSaveAfterReview(markButton),
+      "Save button did not become available after mark reviewed"
+    );
   }
 
   function ensurePanelToggle() {

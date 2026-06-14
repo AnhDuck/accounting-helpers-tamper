@@ -129,16 +129,17 @@
         alignItems: "center",
         background: "rgba(255,255,255,.94)",
         border: "1px solid rgba(0,0,0,.14)",
-        borderRadius: "12px",
-        bottom: "12px",
+        borderRadius: "8px",
+        bottom: "calc(var(--ah-dev-status-offset, 84px) + 44px)",
         boxShadow: "0 6px 20px rgba(0,0,0,.18)",
         display: "flex",
         font: "12px system-ui, sans-serif",
-        gap: "12px",
-        left: "50%",
+        flexWrap: "wrap",
+        gap: "8px",
+        left: "12px",
+        maxWidth: "min(420px, calc(100vw - 24px))",
         padding: "8px 12px",
         position: "fixed",
-        transform: "translateX(-50%)",
         zIndex: "2147483645"
       });
       document.body.append(panel);
